@@ -21,7 +21,7 @@ done
 
 # Q1: Secret Trap (Target: secret-api-deploy)
 kubectl create deploy secret-api-deploy --image=nginx --port=80
-kubectl set env deploy secret-api-deploy DB_USER=admin DB_PASS=Secret123!
+kubectl set env deploy secret-api-deploy DB_USER=admin DB_PASS=Secret123! DB_HOST=db-internal-svc
 
 # Q2: CronJob (No setup needed, student creates from scratch)
 
@@ -187,5 +187,36 @@ FROM alpine:3.18
 RUN echo "OCI-Compliant-Layer" > /metadata.txt
 CMD ["cat", "/metadata.txt"] 
 EOF
+
+# Q18: Mount PVC in a Pod
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-data
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+  - ReadWriteOnce
+  hostPath:
+    path: /mnt/data
+  storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-data
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard
+EOF
+
+---
 
 echo "✅ Environment Ready! All resource names are unique."

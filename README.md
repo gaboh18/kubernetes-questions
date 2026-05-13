@@ -66,6 +66,7 @@
 In namespace `default`, Deployment `secret-api-deploy` exists with hard-coded environment variables:
 - `DB_USER=admin`
 - `DB_PASS=Secret123!`
+- `DB_HOST=db-internal-svc`
 
 Your task:
 1. Create a Secret named `db-credentials` in namespace `default` containing these credentials
@@ -80,6 +81,7 @@ Your task:
 kubectl create secret generic db-credentials \
   --from-literal=DB_USER=admin \
   --from-literal=DB_PASS=Secret123! \
+  --from-literal=DB_HOST=db-internal-svc \
   -n default
 ```
 
@@ -93,6 +95,11 @@ Replace the hardcoded environment variables:
 
 ```yaml
 env:
+  - name: DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: db-credentials
+        key: DB_HOST
   - name: DB_USER
     valueFrom:
       secretKeyRef:
@@ -1126,3 +1133,17 @@ podman save --format oci-archive -o /tmp/internal-tool-oci.tar internal-tool:v1.
 docker buildx build --output type=oci,dest=/tmp/internal-tool-oci.tar -t internal-tool:v1.2 /tmp/oci-lab
 ```
 
+<a id="question-18"></a>
+## Question 18 – Mount PVC in a Pod
+
+A PV pv-data and PVC pvc-data have already been created in default namespace.
+
+Your taks:
+
+In default namespace, create a Pod with the following information:
+- Image: nginx:latest
+- Mount existing PVC pvc-data in the path /usr/share/nginx/html
+
+**Docs**
+
+- Configure a pod to use persistent volume: https://kubernetes.io/docs/tutorials/configuration/configure-persistent-volume-storage/

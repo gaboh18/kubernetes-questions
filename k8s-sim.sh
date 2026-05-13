@@ -32,7 +32,7 @@ function score_exam() {
     echo "📊 --- CKAD SCORE REPORT ---"
 
     # Q1: Secret Ref (Target: secret-api-deploy) - 5 pts
-    [[ $(kubectl get deploy secret-api-deploy -n default -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DB_USER")].valueFrom.secretKeyRef.name}' 2>/dev/null) == "db-credentials" ]] && { echo "✅ Q1: Secret linked (+5)"; ((SCORE+=5)); }
+    [[ $(kubectl get deploy secret-api-deploy -n default -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DB_HOST")].valueFrom.secretKeyRef.name}' 2>/dev/null) == "db-credentials" ]] && { echo "✅ Q1: Database Secret linked (+5)"; ((SCORE+=5)); }
 
     # Q2: CronJob (Target: backup-job) - 6 pts
     [[ $(kubectl get cj backup-job -o jsonpath='{.spec.successfulJobsHistoryLimit}' 2>/dev/null) == "3" ]] && { echo "✅ Q2: CronJob configured (+6)"; ((SCORE+=6)); }
@@ -73,21 +73,28 @@ function score_exam() {
     # Q14: Ingress (Target: web-ingress) - 6 pts
     [[ $(kubectl get ingress web-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null) == "web.example.com" ]] && { echo "✅ Q14: Ingress host set (+6)"; ((SCORE+=6)); }
 
-    # Q15: Ingress PathType (Target: api-ingress) - 6 pts
-    [[ $(kubectl get ingress api-ingress -o jsonpath='{.spec.rules[0].http.paths[0].pathType}' 2>/dev/null) == "Prefix" ]] && { echo "✅ Q15: Ingress PathType fixed (+6)"; ((SCORE+=6)); }
+    # Q15: Ingress PathType (Target: api-ingress) - 4 pts
+    [[ $(kubectl get ingress api-ingress -o jsonpath='{.spec.rules[0].http.paths[0].pathType}' 2>/dev/null) == "Prefix" ]] && { echo "✅ Q15: Ingress PathType fixed (+4)"; ((SCORE+=4)); }
 
-    # Q16: Quota Math (Target: resource-pod in prod) - 6 pts
+    # Q16: Quota Math (Target: resource-pod in prod) - 4 pts
     # Checks if limit is half of the 2 CPU quota
-    [[ $(kubectl get pod resource-pod -n prod -o jsonpath='{.spec.containers[0].resources.limits.cpu}' 2>/dev/null) == "1" ]] && { echo "✅ Q16: Resource math correct (+6)"; ((SCORE+=6)); }
+    [[ $(kubectl get pod resource-pod -n prod -o jsonpath='{.spec.containers[0].resources.limits.cpu}' 2>/dev/null) == "1" ]] && { echo "✅ Q16: Resource math correct (+4)"; ((SCORE+=4)); }
 
-    # Q17: Build and Export as OCI Archive - 6 pts
+    # Q17: Build and Export as OCI Archive - 4 pts
     if [ -f /tmp/internal-tool-oci.tar ]; then
         # Use tar -tf to peek inside and see if it looks like an OCI archive
         IS_OCI=$(tar -tf /tmp/internal-tool-oci.tar | grep -E "index.json|oci-layout" | wc -l)
         if [ $IS_OCI -ge 1 ]; then
-            echo "✅ Q17: Image exported in OCI format (+6)"
-            ((SCORE+=6))
+            echo "✅ Q17: Image exported in OCI format (+4)"
+            ((SCORE+=4))
         fi
+    fi
+
+    # Q18: Mount PVC in a Pod
+    VOL_NAME=$(kubectl get pod nginx-storage-pod -n default -o jsonpath='{.spec.volumes[?(@.persistentVolumeClaim.claimName=="pvc-data")].name}' 2>/dev/null)
+    if [ -n "$VOL_NAME" ]; then
+        MOUNT_PATH=$(kubectl get pod nginx-storage-pod -n default -o jsonpath="{.spec.containers[0].volumeMounts[?(@.name==\"$VOL_NAME\")].mountPath}" 2>/dev/null)
+        [[ "$MOUNT_PATH" == "/usr/share/nginx/html" ]] && { echo "✅ Q18: PVC mounted correctly (+6)"; ((SCORE+=6)); }
     fi
 
     echo "---------------------------"
