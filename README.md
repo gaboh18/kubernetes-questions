@@ -1118,6 +1118,11 @@ Your task:
 ### Solution
 
 ```bash
+podman build -t internal-tool:v1.2 /tmp/oci-lab
+podman save --format oci-archive -o /tmp/internal-tool-oci.tar internal-tool:v1.2
+```
+
+```bash
 docker buildx build --output type=oci,dest=/tmp/internal-tool-oci.tar -t internal-tool:v1.2 /tmp/oci-lab
 ```
 
