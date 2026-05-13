@@ -105,19 +105,65 @@ kubectl create deploy security-context-app --image=nginx
 
 # Q12: Svc Selector Trap (Target: selector-fix-deploy)
 kubectl create deploy selector-fix-deploy --image=nginx --port=80
-kubectl label deploy selector-fix-deploy app=webapp tier=frontend --overwrite
+kubectl label deploy selector-fix-deploy app=frontend-app tier=frontend --overwrite
 kubectl create svc clusterip web-svc --tcp=80:80
 kubectl patch svc web-svc -p '{"spec":{"selector":{"app":"wrongapp"}}}'
 
 # Q13: NodePort Base (Target: nodeport-api-deploy)
-kubectl create deploy nodeport-api-deploy --image=nginx --port=9090
-kubectl label deploy nodeport-api-deploy app=api --overwrite
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodeport-api-deploy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 9090
+EOF
 
-# Q14/Q15: Ingress Base (Target: ingress-web-deploy)
-kubectl create deploy ingress-web-deploy --image=nginx --port=8080
-kubectl label deploy ingress-web-deploy app=web
+# For Q14 (The Web App)
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-web-deploy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 8080
+EOF
 kubectl create svc clusterip web-svc-ingress --tcp=8080:8080
-# Fixed path typo /temp to /tmp
+kubectl patch svc web-svc-ingress -p '{"spec":{"selector":{"app":"web"}}}'
+
+# For Q15 (The API Backend) - Creates the missing endpoints!
+kubectl create deploy api-backend-deploy --image=nginx --port=8080
+kubectl expose deploy api-backend-deploy --name=api-svc --port=8080
+
+# The Broken Ingress File for Q15
 cat <<EOF > /tmp/fix-ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress

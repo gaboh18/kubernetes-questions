@@ -829,7 +829,7 @@ kubectl describe pod <pod-name> -n default
 <a id="question-12"></a>
 ## Question 12 – Fix Service Selector
 
-In namespace `default`, Deployment `selector-fix-deploy` exists with Pods labeled `app=webapp, tier=frontend`.
+In namespace `default`, Deployment `selector-fix-deploy` exists with Pods labeled `app=frontend-app, tier=frontend`.
 
 Service `web-svc` exists but has incorrect selector `app=wrongapp`.
 
@@ -865,7 +865,7 @@ To:
 ```yaml
 spec:
   selector:
-    app: webapp
+    app: frontend-app
 ```
 
 Save and exit.
@@ -933,7 +933,7 @@ kubectl describe svc api-nodeport -n default
 ## Question 14 – Create Ingress Resource
 
 In namespace `default`, the following resources exist:
-- Deployment `ingress-web-deploy` with Pods labeled `app=web`
+- Deployment `ingress-web-deploy` with Pods labeled `app=ingress-web-deploy`
 - Service `web-svc-ingress` with selector `app=web` on port `8080`
 
 Your task:
