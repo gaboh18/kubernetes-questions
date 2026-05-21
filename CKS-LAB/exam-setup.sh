@@ -1,12 +1,55 @@
 #!/bin/bash
-# exam-setup.sh - Prepares the mock environment for the CKS Simulator
+# exam-setup.sh - Hybrid CKS Setup for Docker Desktop
 
-echo "Setting up CKS Simulator Environment (Lab 2)..."
+echo "Setting up Hybrid CKS Simulator for Docker Desktop..."
 
+# 1. Create local simulation directory for Control Plane/Node tasks
 mkdir -p /opt/cks-lab/
-mkdir -p /etc/kubernetes/manifests/ /etc/kubernetes/enc/ /var/log/k8s/ /var/lib/kubelet/
+cd /opt/cks-lab/
 
-# Mock CRDs for Cilium and Istio to prevent 'kubectl apply' errors
+# Q1, Q13, Q17: Simulated API Server
+cat <<EOF > kube-apiserver.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kube-apiserver
+  namespace: kube-system
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --enable-admission-plugins=NodeRestriction
+    name: kube-apiserver
+EOF
+
+# Q9: Simulated Kubelet Config
+cat <<EOF > kubelet-config.yaml
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+authorization:
+  mode: AlwaysAllow
+EOF
+
+# Q7: Dockerfile
+cat <<EOF > Dockerfile
+FROM alpine:3.18
+RUN apk add --no-cache curl
+CMD ["curl", "-s", "http://example.com"]
+EOF
+
+# Q14: Compromised binary simulation
+echo "fake-binary-content" > kube-apiserver-test
+echo "invalid-hash  kube-apiserver-test" > kube-apiserver-test.sha512
+
+# Q4: Falco Log simulation
+cat <<EOF > falco.log
+10:05:00.000000000: Notice A shell was spawned in a container with an attached terminal (user=root container_id=123 pod=hacker-pod namespace=web shell=/bin/bash)
+EOF
+
+# 2. Live Cluster Setup (Standard K8s Resources)
+echo "Setting up live cluster resources..."
+
+# Mock CRDs for Cilium and Istio
 cat <<EOF | kubectl apply -f - 2>/dev/null
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -50,66 +93,13 @@ spec:
 EOF
 
 # Namespaces
-kubectl create ns backend 2>/dev/null
-kubectl create ns web 2>/dev/null
-kubectl create ns app 2>/dev/null
-kubectl create ns istio-system 2>/dev/null
-kubectl create ns prod 2>/dev/null
-kubectl create ns frontend 2>/dev/null
-kubectl create ns database 2>/dev/null
-kubectl create ns dmz 2>/dev/null
+kubectl create ns backend web app istio-system prod frontend database dmz 2>/dev/null
 
-# Q1, Q13, Q17: Mock Apiserver
-cat <<EOF > /opt/cks-lab/kube-apiserver.yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: kube-apiserver
-  namespace: kube-system
-spec:
-  containers:
-  - command:
-    - kube-apiserver
-    - --enable-admission-plugins=NodeRestriction
-    name: kube-apiserver
-EOF
-cp /opt/cks-lab/kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml
-
-# Q4: Malicious Pod
+# Live resources
 kubectl run hacker-pod --image=nginx -n web 2>/dev/null
-cat <<EOF > /var/log/falco.log
-10:05:00.000000000: Notice A shell was spawned in a container with an attached terminal (user=root container_id=123 pod=hacker-pod namespace=web shell=/bin/bash)
-EOF
-
-# Q7: Dockerfile
-cat <<EOF > /opt/cks-lab/Dockerfile
-FROM alpine:3.18
-RUN apk add --no-cache curl
-CMD ["curl", "-s", "http://example.com"]
-EOF
-
-# Q8: AppArmor Deployment
 kubectl create deploy secure-app --image=nginx -n prod 2>/dev/null
-
-# Q9: Kubelet config
-cat <<EOF > /var/lib/kubelet/config.yaml
-apiVersion: kubelet.config.k8s.io/v1beta1
-kind: KubeletConfiguration
-authorization:
-  mode: AlwaysAllow
-EOF
-
-# Q12: ServiceAccount
 kubectl create sa db-sa -n database 2>/dev/null
-
-# Q14: Compromised binary
-echo "fake-binary" > /opt/cks-lab/kube-apiserver
-echo "invalid-hash  kube-apiserver" > /opt/cks-lab/kube-apiserver.sha512
-
-# Q15: Trivy vulnerable deploy
 kubectl create deploy web-server --image=httpd:2.4.49 -n dmz 2>/dev/null
-
-# Q16: RootOnlyFileSystem pod
 kubectl run immutable-pod --image=nginx -n default 2>/dev/null
 
-echo "Setup complete!"
+echo "✅ Hybrid environment ready!"
