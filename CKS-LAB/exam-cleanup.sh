@@ -1,18 +1,16 @@
 #!/bin/bash
-# exam-cleanup.sh - Tears down the mock environment for the CKS Simulator
+# exam-cleanup.sh - Tears down the Docker Desktop mock environment
 
 echo "Cleaning up CKS Simulator Environment..."
 
-rm -rf /opt/cks-lab/
-rm -f /etc/kubernetes/manifests/kube-apiserver.yaml
-rm -f /var/log/falco.log
-rm -f /var/lib/kubelet/config.yaml
+# Clean up simulated directory
+rm -rf /opt/cks-lab/* 2>/dev/null
 
-# Clean Namespaces & Resources
+# Clean up Live Namespaces & Resources
 kubectl delete ns backend web app istio-system prod frontend database dmz --ignore-not-found=true
 kubectl delete pod immutable-pod -n default --ignore-not-found=true
 
-# Clean CRDs
+# Clean up CRDs
 kubectl delete crd ciliumnetworkpolicies.cilium.io --ignore-not-found=true
 kubectl delete crd peerauthentications.security.istio.io --ignore-not-found=true
 
@@ -21,4 +19,4 @@ if [ -f .timer_pid ]; then
     rm .timer_pid .remaining_time 2>/dev/null
 fi
 
-echo "Cleanup complete."
+echo "✅ Cleanup complete."
