@@ -20,231 +20,185 @@
 ```
 ---
 
-Disclaimer: In a real CKS exam, you edit live files like /etc/kubernetes/manifests/kube-apiserver.yaml. 
-To prevent destroying your local environment, this simulator uses /opt/cks-lab/ to represent your host's filesystem.
+> **Disclaimer:** To protect your host system, control plane files are simulated in `/opt/cks-lab/`.
 
-<a id="question-1"></a>
-
-## Question 1 - Pod Security / Hardening
-
-In namespace `default`, Deployment `restricted-deploy` violates the restricted Pod Security Standard.
-Your task:
-
-Modify the deployment to meet the following requirements:
-- Pod Level: Must run as a non-root user.
-- Container Level: Privilege escalation must be disabled.
-- Container Level: Seccomp profile must be set to RuntimeDefault.
-- Container Level: ALL capabilities must be dropped.
-
-```bash
-Solution:
-kubectl edit deploy restricted-deploy
-(Add the following to the spec tree):
-    spec:
-      securityContext:
-        runAsNonRoot: true
-      containers:
-      - name: nginx
-        securityContext:
-          allowPrivilegeEscalation: false
-          seccompProfile:
-            type: RuntimeDefault
-          capabilities:
-            drop:
-            - ALL
-```
 ---
 
-<a id="question-2"></a>
-## Question 2 - Cluster Hardening (API Server)
+## Q1 - API Server Hardening
+**Task:** Edit `/opt/cks-lab/kube-apiserver.yaml` to set `--anonymous-auth` and `--profiling` to `false`.
 
-The API server manifest located at /opt/cks-lab/kube-apiserver.yaml contains insecure flags.
-Your task:
-- Disable anonymous authentication.
-- Set the authorization mode to Node and RBAC.
+**Solution:** ```bash
+vi /opt/cks-lab/kube-apiserver.yaml 
+# Change true to false
+```
 
-Solution:
+---
 
-```bash
+## Q2 - Kubelet Hardening
+**Task:** Edit `/opt/cks-lab/kubelet-config.yaml` to change authorization mode from `AlwaysAllow` to `Webhook`.
+
+**Solution:** ```bash
+vi /opt/cks-lab/kubelet-config.yaml 
+# Change mode: AlwaysAllow to mode: Webhook
+```
+
+---
+
+## Q3 - RBAC Least Privilege
+**Task:** User `dev-user` is bound to `cluster-admin` via 'overly-permissive'. Delete this binding and create 'dev-view-binding' granting the 'view' clusterrole instead.
+
+**Solution:** ```bash
+kubectl delete crb overly-permissive
+kubectl create crb dev-view-binding --clusterrole=view --user=dev-user
+```
+
+---
+
+## Q4 - ServiceAccount Tokens
+**Task:** Disable `automountServiceAccountToken` on Deployment `vault-reader` in namespace `alpha`.
+
+**Solution:** ```bash
+kubectl edit deploy vault-reader -n alpha 
+# Add automountServiceAccountToken: false under spec.template.spec
+```
+
+---
+
+## Q5 - AppArmor Profile
+**Task:** Apply the AppArmor profile 'localhost/restricted-profile' to the container 'nginx' in Deployment `apparmor-app` (namespace `alpha`) using an annotation.
+
+**Solution:** ```bash
+kubectl edit deploy apparmor-app -n alpha
+# Add under spec.template.metadata.annotations:
+# container.apparmor.security.beta.kubernetes.io/nginx: localhost/restricted-profile
+```
+
+---
+
+## Q6 - Seccomp Profile
+**Task:** Enforce the 'RuntimeDefault' seccomp profile at the Pod level for Deployment `seccomp-app` (namespace `alpha`).
+
+**Solution:** ```bash
+kubectl edit deploy seccomp-app -n alpha
+# Add under spec.template.spec.securityContext:
+# seccompProfile:
+#   type: RuntimeDefault
+```
+
+---
+
+## Q7 - Node Hardening (Docker Daemon)
+**Task:** Remove the insecure TCP socket (`0.0.0.0:2375`) from `/opt/cks-lab/daemon.json`.
+
+**Solution:** ```bash
+vi /opt/cks-lab/daemon.json 
+# Delete the tcp://0.0.0.0:2375 entry from the array
+```
+
+---
+
+## Q8 - Kubesec Pod Hardening
+**Task:** Modify Deployment `kubesec-app` (namespace `beta`) to `runAsNonRoot: true` (Pod level) and `readOnlyRootFilesystem: true` (Container level).
+
+**Solution:** ```bash
+kubectl edit deploy kubesec-app -n beta
+```
+
+---
+
+## Q9 - Encryption at Rest
+**Task:** Add `--encryption-provider-config=/opt/cks-lab/encryption-config.yaml` to the API server manifest.
+
+**Solution:** ```bash
 vi /opt/cks-lab/kube-apiserver.yaml
-(Change the existing flags to):
-    - --anonymous-auth=false
-    - --authorization-mode=Node,RBAC
 ```
+
 ---
 
-<a id="question-3"></a>
-## Question 3 - Audit Logging
+## Q10 - ImagePolicyWebhook
+**Task:** Add `ImagePolicyWebhook` to the `--enable-admission-plugins` flag and specify `--admission-control-config-file=/opt/cks-lab/admission-config.yaml` in the API Server.
 
-Enable audit logging on the API server manifest located at /opt/cks-lab/kube-apiserver.yaml.
-Your task:
-
-- Add the flag to point to the policy file: /etc/kubernetes/audit/policy.yaml
-- Add the flag to set the log path to: /var/log/kubernetes/audit.log
-(Note: For the simulator, you only need to add the flags, you do not need to create the volume mounts, though in the real exam, missing the mount = fail!).
-
-Solution:
-
-```bash
+**Solution:** ```bash
 vi /opt/cks-lab/kube-apiserver.yaml
-(Add under the command section):
-    - --audit-policy-file=/etc/kubernetes/audit/policy.yaml
-    - --audit-log-path=/var/log/kubernetes/audit.log
 ```
+
 ---
 
-<a id="question-4"></a>
-## Question 4 - Admission Controller (ImagePolicyWebhook)
+## Q11 - Trivy Vulnerability Fix
+**Task:** Deployment `frontend-app` (namespace `beta`) is running `nginx:1.14`. Update it to `nginx:alpine` to fix CVEs.
 
-You need to enable the ImagePolicyWebhook admission controller.
-The configuration file is located at /opt/cks-lab/admission-kubeconfig.yaml.
-Your task
-:
-Edit /opt/cks-lab/kube-apiserver.yaml to:
-- Enable the ImagePolicyWebhook plugin.
-- Provide the path to the admission control config file.
+**Solution:** ```bash
+kubectl set image deploy/frontend-app nginx=nginx:alpine -n beta
+```
 
-Solution:
-```bash
+---
+
+## Q12 - OPA Gatekeeper Simulation
+**Task:** Label namespace `gamma` with `gatekeeper=enforce` to activate an existing policy.
+
+**Solution:** ```bash
+kubectl label ns gamma gatekeeper=enforce
+```
+
+---
+
+## Q13 - Audit Logging
+**Task:** Add `--audit-policy-file=/opt/cks-lab/audit-policy.yaml` and `--audit-log-path=/var/log/kubernetes/audit.log` to the API server.
+
+**Solution:** ```bash
 vi /opt/cks-lab/kube-apiserver.yaml
-(Update/Add the following flags):
-    - --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
-    - --admission-control-config-file=/opt/cks-lab/admission-kubeconfig.yaml
-```
----
-
-<a id="question-5"></a>
-## Question 5 - Network Policies
-
-In namespace net-block, communication is blocked. Policies already exist. You are NOT allowed to edit or delete the NetworkPolicies.
-Your task:
-Update the labels on the existing Pods (frontend, backend, database) so they comply with the existing policies to allow the communication chain: frontend -> backend -> database.
-
-Solution:
-
-```bash
-kubectl label pod frontend -n net-block app=frontend --overwrite
-kubectl label pod backend -n net-block app=backend --overwrite
-kubectl label pod database -n net-block app=db --overwrite
-```
-
---- 
-
-<a id="question-6"></a>
-## Question 6 - Docker / Node Hardening
-
-A node has been insecurely configured. 
-Youir task:
-
-- Edit /opt/cks-lab/daemon.json and remove the insecure TCP socket exposed on 0.0.0.0:2375.
-- Edit /opt/cks-lab/group and remove the user 'hacker' from the docker group.
-
-Solution:
-```bash
-vi /opt/cks-lab/daemon.json
-(Remove "tcp://0.0.0.0:2375" from the hosts array)
-
-vi /opt/cks-lab/group
-(Change docker:x:999:ubuntu,hacker,admin TO docker:x:999:ubuntu,admin)
-
-```
----
-
-<a id="question-7"></a>
-## Question 7 - Runtime / Workload Security
-
-A misbehaving workload is running in the runtime-sec namespace.
-Your task:
-
-Identify the malicious pod (it is mining crypto) and permanently isolate it by deleting it from the cluster.
-
-Solution:
-
-```bash
-kubectl get pods -n runtime-sec
-kubectl delete pod crypto-miner -n runtime-sec
 ```
 
 ---
 
-<a id="question-8"></a>
-## Question 8 - ServiceAccount Security
+## Q14 - Runtime Security / Investigation
+**Task:** A malicious pod (`hacker-pod`) is running in namespace `beta`. Delete it.
 
-Deployment token-deploy in the default namespace auto-mounts the default ServiceAccount token insecurely.
-Your task:
-
-- Disable the auto-mounting of the default token.
-- Manually mount a projected service account token to the path /var/run/secrets/tokens.
-
-Solution:
-
-```bash
-kubectl edit deploy token-deploy
-(Add automountServiceAccountToken and the projected volume):
-    spec:
-      automountServiceAccountToken: false
-      containers:
-      - image: nginx
-        name: nginx
-        volumeMounts:
-        - mountPath: /var/run/secrets/tokens
-          name: vault-token
-      volumes:
-      - name: vault-token
-        projected:
-          sources:
-          - serviceAccountToken:
-              path: vault-token
-              expirationSeconds: 7200
-              audience: vault
-```bash
+**Solution:** ```bash
+kubectl delete pod hacker-pod -n beta
+```
 
 ---
 
-<a id="question-9"></a>
-## Question 9 - SBOM and Vulnerability Scanning
+## Q15 - Dropping Capabilities
+**Task:** Drop ALL capabilities for the container in Deployment `kubesec-app` (namespace `beta`).
 
-Pod webapp-pod in the default namespace has multiple containers. You ran an SBOM/Trivy scan and identified that the container named 'vulnerable-sidecar' has critical vulnerabilities.
-Your task:
-
-Modify the running pod (or extract, edit, and replace it) to remove ONLY the 'vulnerable-sidecar' container.
-
-Solution:
-
-```bash
-kubectl get pod webapp-pod -o yaml > /tmp/webapp.yaml
-vi /tmp/webapp.yaml
-(Delete the block for the vulnerable-sidecar container)
-kubectl delete pod webapp-pod --force
-kubectl apply -f /tmp/webapp.yaml
+**Solution:** ```bash
+kubectl edit deploy kubesec-app -n beta
+# Add to container securityContext:
+# capabilities:
+#   drop: ["ALL"]
 ```
---- 
 
-<a id="question-10"></a>
-### Question 10 - Istio mTLS
+---
 
-Your cluster uses Istio. 
-Your task:
+## Q16 - Network Policy: Default Deny (5 pts)
+**Task:** Create a NetworkPolicy named 'default-deny' in namespace `secure-zone` that blocks all Ingress and Egress traffic.
 
-- Label the namespace istio-prod to enable automatic sidecar injection.
-- Since Istio might not be installed in this simulator, write a valid Istio PeerAuthentication YAML manifest to /opt/cks-lab/mtls.yaml that enforces STRICT mTLS for the entire istio-prod namespace.
-
-Solution:
-
-```bash
-kubectl label ns istio-prod istio-injection=enabled
-
-cat <<EOF > /opt/cks-lab/mtls.yaml
-apiVersion: security.istio.io/v1beta1
-kind: PeerAuthentication
+**Solution:** ```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: default
-  namespace: istio-prod
+  name: default-deny
+  namespace: secure-zone
 spec:
-  mtls:
-    mode: STRICT
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
 EOF
-
 ```
 
---- 
+---
+
+## Q17 - Network Policy: DNS Trap (5 pts)
+**Task:** NetworkPolicy `egress-trap` in namespace `gamma` breaks DNS resolution. Edit it to allow Egress on TCP/UDP port 53.
+
+**Solution:** ```bash
+kubectl edit netpol egress-trap -n gamma
+# Add ports to egress block:
+# - ports:
+#   - port: 53
+#     protocol: UDP
+#   - port: 53
+#     protocol: TCP
+```
