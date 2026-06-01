@@ -25,7 +25,7 @@
 ---
 
 ## Q1 - Admission Controller
-**Task:** Edit `/opt/cks-lab/kube-apiserver.yaml` to ensure both `NodeRestriction` and `ImagePolicyWebhook` are included in the `--enable-admission-plugins` flag.
+**Task:** The cluster's API server is currently missing critical admission control plugins, leaving it vulnerable to unauthorized node updates and untested container images. Ensure that both the NodeRestriction and ImagePolicyWebhook plugins are actively enforced on the control plane node. Ensure the API server is running and healthy after applying your changes.
 
 **Solution**:
 ```bash
@@ -158,7 +158,7 @@ kubectl edit deploy secure-app -n prod
 ---
 
 ## Q9 - Kube-bench Fixes
-**Task:** Run `kube-bench` on the control plane. Fix the failing finding related to the kubelet's authorization mode by setting it to `Webhook`.
+**Task:** A recent security audit revealed a critical vulnerability on the master node: the Kubelet is currently permitting unauthorized API requests. Reconfigure the node's Kubelet to delegate authorization to the Kubernetes API server via Webhooks. Ensure the Kubelet service successfully restarts and the node returns to a Ready state..
 
 **Solution:**
 ```bash
@@ -203,7 +203,8 @@ kubectl edit sa db-sa -n database
 ---
 
 ## Q13 - Auditing
-**Task:** Enable audit logging on the API server. Use the policy file at `/etc/kubernetes/audit-policy.yaml` and output the logs to `/var/log/k8s/audit.log` with a max age of 30 days.
+**Task:** The security compliance team requires API server requests to be audited. An audit policy file has already been staged on the control plane node at /etc/kubernetes/audit-policy.yaml. Configure the API server to use this policy file.
+(Note: For the scope of this simulation task, you only need to provide the flag pointing to the policy; you do not need to configure the log output destination or volume mounts).
 
 **Solution:** 
 ```bash
@@ -218,7 +219,7 @@ vi /etc/kubernetes/manifests/kube-apiserver.yaml
 ---
 
 ## Q14 - SHA512SUM Verification
-**Task:** Download the `kube-apiserver` binary and its `.sha512` checksum file. Verify the binary. If it fails, delete the binary.
+**Task:** The incident response team suspects a binary replacement attack has occurred on the master node. A test binary named kube-apiserver-test and its expected SHA512 checksum file (kube-apiserver-test.sha512) are located in the /usr/local/bin/ directory on the node. Verify the integrity of the binary. If the hash does not match the provided checksum, permanently remove the compromised binary from the host.
 
 **Solution:** 
 ```bash
@@ -256,7 +257,8 @@ kubectl edit pod immutable-pod
 ---
 
 ## Q17 - Secrets Encryption at Rest
-**Task:** Configure the API Server to encrypt `Secret` resources at rest using the `aescbc` provider. An encryption config file already exists at `/etc/kubernetes/enc/encryption.yaml`.
+**Task:** Kubernetes Secrets are currently being stored in plaintext within etcd. Secure the cluster by ensuring the API server is properly configured to encrypt secrets at rest. You must append the appropriate flag to the API server configuration to enable an encryption provider.
+(Note: Assume the provider configuration file is already staged and mapped; you only need to provide the activation flag).
 
 **Solution:** 
 ```bash

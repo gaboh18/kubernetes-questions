@@ -1,55 +1,26 @@
 #!/bin/bash
-# exam-setup.sh - Hybrid CKS Setup for Docker Desktop
+# exam-setup.sh - Minikube-Native CKS Simulator
 
-echo "Setting up Hybrid CKS Simulator for Docker Desktop..."
+echo "Setting up Minikube CKS Simulator..."
 
-# 1. Create local simulation directory for Control Plane/Node tasks
-mkdir -p /opt/cks-lab/
+# 1. Setup Jumpbox Files (Mac Host)
+echo "Setting up Jumpbox (Mac) files in /opt/cks-lab/..."
+sudo mkdir -p /opt/cks-lab/
+sudo chown -R $USER /opt/cks-lab/
 cd /opt/cks-lab/
 
-# Q1, Q13, Q17: Simulated API Server
-cat <<EOF > kube-apiserver.yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: kube-apiserver
-  namespace: kube-system
-spec:
-  containers:
-  - command:
-    - kube-apiserver
-    - --enable-admission-plugins=NodeRestriction
-    name: kube-apiserver
-EOF
-
-# Q9: Simulated Kubelet Config
-cat <<EOF > kubelet-config.yaml
-apiVersion: kubelet.config.k8s.io/v1beta1
-kind: KubeletConfiguration
-authorization:
-  mode: AlwaysAllow
-EOF
-
-# Q7: Dockerfile
 cat <<EOF > Dockerfile
 FROM alpine:3.18
 RUN apk add --no-cache curl
 CMD ["curl", "-s", "http://example.com"]
 EOF
 
-# Q14: Compromised binary simulation
-echo "fake-binary-content" > kube-apiserver-test
-echo "invalid-hash  kube-apiserver-test" > kube-apiserver-test.sha512
-
-# Q4: Falco Log simulation
 cat <<EOF > falco.log
 10:05:00.000000000: Notice A shell was spawned in a container with an attached terminal (user=root container_id=123 pod=hacker-pod namespace=web shell=/bin/bash)
 EOF
 
-# 2. Live Cluster Setup (Standard K8s Resources)
-echo "Setting up live cluster resources..."
-
-# Mock CRDs for Cilium and Istio
+# 2. Setup Live Cluster Resources
+echo "Deploying vulnerable cluster resources..."
 cat <<EOF | kubectl apply -f - 2>/dev/null
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -92,14 +63,22 @@ spec:
         x-kubernetes-preserve-unknown-fields: true
 EOF
 
-# Namespaces
 kubectl create ns backend web app istio-system prod frontend database dmz 2>/dev/null
-
-# Live resources
 kubectl run hacker-pod --image=nginx -n web 2>/dev/null
 kubectl create deploy secure-app --image=nginx -n prod 2>/dev/null
 kubectl create sa db-sa -n database 2>/dev/null
 kubectl create deploy web-server --image=httpd:2.4.49 -n dmz 2>/dev/null
 kubectl run immutable-pod --image=nginx -n default 2>/dev/null
 
-echo "✅ Hybrid environment ready!"
+# 3. Inject Node-Level Vulnerabilities (Minikube Node)
+echo "Injecting node-level misconfigurations..."
+
+# Break the Kubelet authorization mode
+minikube ssh "sudo sed -i 's/mode: Webhook/mode: AlwaysAllow/g' /var/lib/kubelet/config.yaml"
+minikube ssh "sudo systemctl restart kubelet"
+
+# Plant compromised binaries on the node
+minikube ssh "sudo bash -c 'echo \"fake-binary-content\" > /usr/local/bin/kube-apiserver-test'"
+minikube ssh "sudo bash -c 'echo \"invalid-hash  /usr/local/bin/kube-apiserver-test\" > /usr/local/bin/kube-apiserver-test.sha512'"
+
+echo "✅ Minikube Hybrid Environment Ready!"
