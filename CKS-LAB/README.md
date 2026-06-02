@@ -25,12 +25,19 @@
 ---
 
 ## Q1 - Admission Controller
-**Task:** The cluster's API server is currently missing critical admission control plugins, leaving it vulnerable to unauthorized node updates and untested container images. Ensure that both the NodeRestriction and ImagePolicyWebhook plugins are actively enforced on the control plane node. Ensure the API server is running and healthy after applying your changes.
+**Task:** The cluster's API server is currently missing critical admission control plugins, leaving it vulnerable to unauthorized node updates and untested container images. Ensure that both the `NodeRestriction` and `ImagePolicyWebhook` plugins are actively enforced on the control plane node. An exam-grade admission file has been pre-staged for you at `/etc/kubernetes/image-config/admission-configuration.yaml`. Ensure the API server is running and healthy after applying your changes.
 
 **Solution**:
 ```bash
-vi /opt/cks-lab/kube-apiserver.yaml 
-# Modify --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+# 1. Edit the pre-staged config to enforce strict security (change defaultAllow: true to false)
+vi /etc/kubernetes/image-config/admission-configuration.yaml
+
+# 2. Modify the API Server Manifest
+vi /etc/kubernetes/manifests/kube-apiserver.yaml
+# Add/Modify under spec.containers.command:
+# - --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+# - --admission-control-config-file=/etc/kubernetes/image-config/admission-configuration.yaml
+# Ensure volumeMounts and volumes mapping /etc/kubernetes/image-config/ are active.
 ```
 
 ---
@@ -72,12 +79,12 @@ EOF
 ---
 
 ## Q4 - Falco Runtime Security
-**Task:** Review the Falco logs at `/var/log/falco.log`. Identify the pod in the `web` namespace that spawned a terminal shell (`/bin/bash`) and delete it.
+**Task:** Review the Falco logs at /opt/cks-lab/falco.log. Identify the pod in the web namespace that spawned a terminal shell (/bin/bash) and delete it..
 
 **Solution:**
 ```bash
-cat /var/log/falco.log | grep "Notice A shell was spawned in a container"
-# Extract the pod name (e.g., hacker-pod)
+cat /opt/cks-lab/falco.log | grep "Notice A shell was spawned in a container"
+# Extract the malicious pod name (hacker-pod)
 kubectl delete pod hacker-pod -n web
 ```
 
@@ -143,13 +150,18 @@ vi /opt/cks-lab/Dockerfile
 ---
 
 ## Q8 - AppArmor & Seccomp
-**Task:** Edit Deployment `secure-app` in namespace `prod`. Apply the `localhost/custom-profile` AppArmor profile via annotations and the `RuntimeDefault` Seccomp profile via the security context.
+**Task:** Edit Deployment secure-app in namespace prod. Apply the pre-staged AppArmor profile (custom-profile) via annotations and the RuntimeDefault Seccomp profile via the pod's security context.
+(Note: You must load the staged profile at /etc/apparmor.d/custom-profile into the node kernel first).
 
 **Solution:** 
 ```bash
+# 1. Load the profile into the kernel (Run inside minikube ssh as root):
+apparmor_parser -q /etc/apparmor.d/custom-profile
+
+# 2. Configure the Deployment (Run on your Mac terminal):
 kubectl edit deploy secure-app -n prod
-# Add under metadata.annotations:
-#   container.apparmor.security.beta.kubernetes.io/container-name: localhost/custom-profile
+# Add under spec.template.metadata.annotations:
+#   container.apparmor.security.beta.kubernetes.io/secure-app: localhost/custom-profile
 # Add under spec.template.spec.securityContext:
 #   seccompProfile:
 #     type: RuntimeDefault
@@ -158,13 +170,14 @@ kubectl edit deploy secure-app -n prod
 ---
 
 ## Q9 - Kube-bench Fixes
-**Task:** A recent security audit revealed a critical vulnerability on the master node: the Kubelet is currently permitting unauthorized API requests. Reconfigure the node's Kubelet to delegate authorization to the Kubernetes API server via Webhooks. Ensure the Kubelet service successfully restarts and the node returns to a Ready state..
+**Task:** A recent security audit revealed a critical vulnerability on the master node: the Kubelet is currently permitting unauthorized API requests. Reconfigure the node's Kubelet to delegate authorization to the Kubernetes API server via Webhooks. Ensure the Kubelet service successfully restarts.
 
 **Solution:**
 ```bash
-kube-bench run --targets master,node
 vi /var/lib/kubelet/config.yaml
-# Change authorization: mode: AlwaysAllow to mode: Webhook
+# Change authorization.mode from AlwaysAllow to Webhook:
+# authorization:
+#   mode: Webhook
 systemctl restart kubelet
 ```
 
@@ -223,11 +236,10 @@ vi /etc/kubernetes/manifests/kube-apiserver.yaml
 
 **Solution:** 
 ```bash
-# Assuming files are in /opt/cks-lab/
-cd /opt/cks-lab/
-sha512sum -c kube-apiserver.sha512
-# If the output says "FAILED", delete it:
-rm kube-apiserver
+cd /usr/local/bin/
+sha512sum -c kube-apiserver-test.sha512
+# If the verification output displays "FAILED", delete it:
+rm -f kube-apiserver-test*
 ```
 
 ---
@@ -248,22 +260,33 @@ kubectl set image deploy/web-server httpd=httpd:2.4.58 -n dmz
 
 **Solution:** 
 ```bash
-kubectl edit pod immutable-pod
-# Add to the container's securityContext:
-# securityContext:
-#   readOnlyRootFilesystem: true
+# Note: Pod configurations are immutable. You must copy, modify, and replace it.
+kubectl get pod immutable-pod -o json > pod.json
+vi pod.json
+# Under spec.containers[0].securityContext, add:
+# readOnlyRootFilesystem: true
+kubectl delete pod immutable-pod --force
+kubectl apply -f pod.json && rm pod.json
 ```
 
 ---
 
 ## Q17 - Secrets Encryption at Rest
-**Task:** Kubernetes Secrets are currently being stored in plaintext within etcd. Secure the cluster by ensuring the API server is properly configured to encrypt secrets at rest. You must append the appropriate flag to the API server configuration to enable an encryption provider.
-(Note: Assume the provider configuration file is already staged and mapped; you only need to provide the activation flag).
+**Task:** Kubernetes Secrets are currently being stored in plaintext within etcd. Secure the cluster by ensuring the API server is properly configured to encrypt secrets at rest using the pre-staged template configuration found at /etc/kubernetes/encryption/encryption-config.yaml.
+(Note: You must generate a random base64 32-byte key, add it to the secret box inside the config, and wire it up to the API server).
 
 **Solution:** 
 ```bash
+# 1. Generate the key
+head -c 32 /dev/urandom | base64
+
+# 2. Populate the key inside /etc/kubernetes/encryption/encryption-config.yaml
+vi /etc/kubernetes/encryption/encryption-config.yaml
+# Change identity: {} provider to a secretbox provider containing your generated key.
+
+# 3. Reference the configuration file in the API Server
 vi /etc/kubernetes/manifests/kube-apiserver.yaml
 # Add the flag:
-# - --encryption-provider-config=/etc/kubernetes/enc/encryption.yaml
-# (Ensure volume mounts for /etc/kubernetes/enc are configured)
+# - --encryption-provider-config=/etc/kubernetes/encryption/encryption-config.yaml
+# Ensure volumeMounts and volumes for /etc/kubernetes/encryption are configured.
 ```
