@@ -94,7 +94,7 @@ function score_exam() {
         echo "✅ Q12: Automount ServiceAccount token disabled (+6)"
         ((SCORE+=6))
     fi
-    if minikube ssh "sudo grep -q 'audit-policy-file' /etc/kubernetes/manifests/kube-apiserver.yaml" 2>/dev/null; then
+    if minikube ssh "sudo grep -q '/etc/kubernetes/audit/audit-policy.yaml' /etc/kubernetes/manifests/kube-apiserver.yaml" 2>/dev/null; then
         echo "✅ Q13: Audit logging enabled (+6)"
         ((SCORE+=6))
     fi
@@ -110,7 +110,7 @@ function score_exam() {
         echo "✅ Q16: ReadOnlyRootFilesystem enforced (+5)"
         ((SCORE+=5))
     fi
-    if minikube ssh "sudo grep -q 'encryption-provider-config' /etc/kubernetes/manifests/kube-apiserver.yaml" 2>/dev/null; then
+    if minikube ssh "sudo grep -q '/etc/kubernetes/manifests/kube-apiserver.yaml' /etc/kubernetes/manifests/kube-apiserver.yaml" 2>/dev/null; then
         echo "✅ Q17: Encryption at rest configured (+6)"
         ((SCORE+=6))
     fi

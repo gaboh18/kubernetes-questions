@@ -70,6 +70,10 @@ resources:
   - resources:
       - secrets
     providers:
+      - secretBox:
+          keys:
+            - name: key
+              secret: {RAND_KEY}
       - identity: {}
 EOF"
 

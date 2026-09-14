@@ -107,7 +107,7 @@ spec:
   - toEndpoints:
     - matchLabels:
         k8s:io.kubernetes.pod.namespace: kube-system
-        k8s:k8s-app: kube-dns
+        k8s-app: kube-dns
     toPorts:
     - ports:
       - port: "53"
@@ -216,14 +216,14 @@ kubectl edit sa db-sa -n database
 ---
 
 ## Q13 - Auditing
-**Task:** The security compliance team requires API server requests to be audited. An audit policy file has already been staged on the control plane node at /etc/kubernetes/audit-policy.yaml. Configure the API server to use this policy file.
+**Task:** The security compliance team requires API server requests to be audited. An audit policy file has already been staged on the control plane node at /etc/kubernetes/audit/audit-policy.yaml. Configure the API server to use this policy file.
 (Note: For the scope of this simulation task, you only need to provide the flag pointing to the policy; you do not need to configure the log output destination or volume mounts).
 
 **Solution:** 
 ```bash
 vi /etc/kubernetes/manifests/kube-apiserver.yaml
 # Add the following flags:
-# - --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+# - --audit-policy-file=/etc/kubernetes/audit/audit-policy.yaml
 # - --audit-log-path=/var/log/k8s/audit.log
 # - --audit-log-maxage=30
 # (Ensure volume mounts for these paths are also configured)
