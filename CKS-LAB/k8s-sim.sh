@@ -5,6 +5,20 @@ DURATION=120
 JUMPBOX_DIR="/opt/cks-lab"
 
 function start_exam() {
+    echo "🧹 Wiping old environment and caches..."
+    # 1. Forcefully purge any existing minikube clusters/profiles
+    minikube delete --all --purge &>/dev/null
+
+    pkill -f "remaining_time" &>/dev/null
+    
+    # 2. Clear out local context credential caches to prevent locking
+    rm -rf ~/.kube ~/.minikube &>/dev/null
+
+    echo "🏗️ Spinning up a completely fresh Minikube cluster baseline..."
+    # 3. Provision a brand new cluster from scratch
+    minikube start
+
+    echo "⚙️ Running exam injection payloads..."
     chmod +x exam-cleanup.sh exam-setup.sh
     
     ./exam-cleanup.sh
@@ -20,9 +34,10 @@ function start_exam() {
         echo "EXPIRED" > .remaining_time
     ) &
     echo $! > .timer_pid
+
     clear
     echo "------------------------------------------------------------"
-    echo "  🚀 CKS MINIKUBE HYBRID SIMULATOR STARTED 🚀"
+    echo "   🚀 CKS MINIKUBE HYBRID SIMULATOR STARTED 🚀"
     echo "------------------------------------------------------------"
     echo "⏰ Time remaining: 120 minutes"
     echo "⚠️  Jumpbox Workspace: $JUMPBOX_DIR"
