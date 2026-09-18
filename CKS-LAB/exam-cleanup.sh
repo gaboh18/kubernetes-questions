@@ -3,18 +3,18 @@
 
 echo "Cleaning up CKS Simulator Environment..."
 
-# 1. Clear Jumpbox Files (Mac Host)
 rm -rf /opt/cks-lab/* 2>/dev/null
 
-# 2. Clean up Live Resources with Strict Fail-Fast Timeouts
 echo "Removing Kubernetes resources..."
 kubectl delete ns backend web app istio-system prod frontend database dmz --ignore-not-found=true --timeout=5s 2>/dev/null
-kubectl delete pod immutable-pod -n default --ignore-not-found=true --timeout=5s 2>/dev/null
+kubectl delete pod immutable-pod multi-pod token-pod -n default --ignore-not-found=true --timeout=5s 2>/dev/null
+kubectl delete ingress secure-ingress -n default --ignore-not-found=true 2>/dev/null
+kubectl delete secret secure-tls -n default --ignore-not-found=true 2>/dev/null
 kubectl delete crd ciliumnetworkpolicies.cilium.io peerauthentications.security.istio.io --ignore-not-found=true --timeout=5s 2>/dev/null
 
-# clean node-level injections
-echo "Reverting Node-level misconfigurations..."
-minikube ssh "sudo rm -rf /etc/kubernetes/image-config /etc/kubernetes/audit /etc/kubernetes/encryption"
-minikube ssh "sudo rm -f /etc/apparmor.d/custom-profile"
+echo "Reverting Node-level injections..."
+minikube ssh "sudo rm -rf /etc/kubernetes/image-config /etc/kubernetes/audit /etc/kubernetes/encryption /etc/falco"
+minikube ssh "sudo rm -f /etc/apparmor.d/custom-profile /usr/local/bin/bom /usr/local/bin/kube-apiserver-test*"
+minikube ssh "sudo gpasswd -d unauthorized_user docker 2>/dev/null; sudo userdel unauthorized_user 2>/dev/null; sudo chown root:docker /var/run/docker.sock 2>/dev/null"
 
 echo "✅ Cleanup complete."

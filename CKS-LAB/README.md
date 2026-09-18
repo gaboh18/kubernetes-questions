@@ -150,21 +150,25 @@ vi /opt/cks-lab/Dockerfile
 ---
 
 ## Q8 - AppArmor & Seccomp
-**Task:** Edit Deployment secure-app in namespace prod. Apply the pre-staged AppArmor profile (custom-profile) via annotations and the RuntimeDefault Seccomp profile via the pod's security context.
+**Task:** Edit Deployment secure-app in namespace prod. Apply the pre-staged AppArmor profile (custom-profile) and the RuntimeDefault Seccomp profile via the container's securityContext.
 (Note: You must load the staged profile at /etc/apparmor.d/custom-profile into the node kernel first).
 
 **Solution:** 
 ```bash
 # 1. Load the profile into the kernel (Run inside minikube ssh as root):
-apparmor_parser -q /etc/apparmor.d/custom-profile
+apparmor_parser -r -W /etc/apparmor.d/custom-profile
 
 # 2. Configure the Deployment (Run on your Mac terminal):
-kubectl edit deploy secure-app -n prod
-# Add under spec.template.metadata.annotations:
-#   container.apparmor.security.beta.kubernetes.io/secure-app: localhost/custom-profile
-# Add under spec.template.spec.securityContext:
-#   seccompProfile:
-#     type: RuntimeDefault
+kubectl edit deploy -n prod secure-app
+
+Under spec.template.spec.containers[0].securityContext, add:
+
+securityContext:
+  appArmorProfile:
+    type: Localhost
+    localhostProfile: custom-profile
+  seccompProfile:
+    type: RuntimeDefault
 ```
 
 ---
