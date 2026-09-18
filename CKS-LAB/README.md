@@ -25,7 +25,12 @@
 ---
 
 ## Q1 - Admission Controller
-**Task:** The cluster's API server is currently missing critical admission control plugins, leaving it vulnerable to unauthorized node updates and untested container images. Ensure that both the `NodeRestriction` and `ImagePolicyWebhook` plugins are actively enforced on the control plane node. An exam-grade admission file has been pre-staged for you at `/etc/kubernetes/image-config/admission-configuration.yaml`. Ensure the API server is running and healthy after applying your changes.
+**Task:** The cluster's API server is missing critical admission control plugins. 
+1. Enable the `NodeRestriction` and `ImagePolicyWebhook` plugins on the API server.
+2. An admission configuration file has been pre-staged at `/etc/kubernetes/image-config/admission-configuration.yaml`. Configure the API server to use it.
+3. Modify the pre-staged configuration file to reject pods by default if the external webhook backend is unreachable.
+
+*Note: You can access the control plane node via `minikube ssh`.*
 
 **Solution**:
 ```bash
@@ -58,6 +63,10 @@ systemctl daemon-reload && systemctl restart kubelet
 ---
 
 ## Q3 - Network Policy
+**Context:**  
+`kubectl config use-context minikube`
+
+
 **Task:** Create a NetworkPolicy named `default-deny-all` in the `backend` namespace that denies all ingress and egress traffic by default.
 
 **Solution:** 
@@ -79,19 +88,33 @@ EOF
 ---
 
 ## Q4 - Falco Runtime Security
-**Task:** Review the Falco logs at /opt/cks-lab/falco.log. Identify the pod in the web namespace that spawned a terminal shell (/bin/bash) and delete it..
+**Task:** A new security policy dictates that any read or write access to `/dev/mem` on the host must trigger a Falco alert. 
+1. Append a custom rule to `/etc/falco/falco_rules.local.yaml` to detect this behavior. Set the priority to `WARNING`.
+2. A deployment named `web-backend` in the `web` namespace has been flagged for violating this policy. Scale the deployment down to `0` replicas immediately.
+
+*Note: You can access the host via `minikube ssh`.*
 
 **Solution:**
 ```bash
-cat /opt/cks-lab/falco.log | grep "Notice A shell was spawned in a container"
-# Extract the malicious pod name (hacker-pod)
-kubectl delete pod hacker-pod -n web
+# 1. Edit Falco rules on the node
+minikube ssh
+sudo vi /etc/falco/falco_rules.local.yaml
+# Append the following:
+- rule: Detect Memory Access
+  desc: Alert when /dev/mem is accessed
+  condition: open_read or open_write and fd.name = "/dev/mem"
+  output: "Memory accessed (user=%user.name command=%proc.cmdline)"
+  priority: WARNING
+exit
+
+# 2. Scale deployment on base terminal
+kubectl scale deploy web-backend --replicas=0 -n web
 ```
 
 ---
 
 ## Q5 - Cilium Network Policy
-**Task:** Create a `CiliumNetworkPolicy` named `restrict-dns` in the `app` namespace that only allows egress traffic on port 53 (UDP) to `kube-dns`.
+**Task:** The cluster uses Cilium for CNI. Create a CiliumNetworkPolicy named restrict-dns in the app namespace. The policy must strictly restrict all egress traffic from pods in the app namespace so they can only communicate with the kube-dns pods in the kube-system namespace on UDP port 53.
 
 **Solution:** 
 ```bash
@@ -118,7 +141,7 @@ EOF
 ---
 
 ## Q6 - Istio mTLS
-**Task:** Apply a `PeerAuthentication` policy in the `istio-system` namespace to enforce `STRICT` mutual TLS (mTLS) for the entire cluster.
+**Task:** The cluster has Istio installed. Enforce STRICT mutual TLS (mTLS) for all workloads across the entire cluster by creating a PeerAuthentication resource named default-strict-mtls in the istio-system namespace.
 
 **Solution:** 
 ```bash
@@ -150,8 +173,12 @@ vi /opt/cks-lab/Dockerfile
 ---
 
 ## Q8 - AppArmor & Seccomp
-**Task:** Edit Deployment secure-app in namespace prod. Apply the pre-staged AppArmor profile (custom-profile) and the RuntimeDefault Seccomp profile via the container's securityContext.
-(Note: You must load the staged profile at /etc/apparmor.d/custom-profile into the node kernel first).
+**Task:** An AppArmor profile named custom-profile has been loaded into the kernel of the control plane node.
+Update the existing Deployment named secure-app in the prod namespace to utilize native Kubernetes security context fields (v1.30+):
+
+1. Enforce the custom-profile AppArmor profile on the container.
+
+2. Enforce the RuntimeDefault seccomp profile on the container.
 
 **Solution:** 
 ```bash
@@ -174,7 +201,10 @@ securityContext:
 ---
 
 ## Q9 - Kube-bench Fixes
-**Task:** A recent security audit revealed a critical vulnerability on the master node: the Kubelet is currently permitting unauthorized API requests. Reconfigure the node's Kubelet to delegate authorization to the Kubernetes API server via Webhooks. Ensure the Kubelet service successfully restarts.
+**Task:** A kube-bench report indicated that the kubelet on the control plane node is allowing unauthenticated API requests.
+Reconfigure the node's Kubelet to delegate authorization to the Kubernetes API server using Webhooks. Ensure the Kubelet service successfully restarts.
+
+Note: Access the node via minikube ssh.
 
 **Solution:**
 ```bash
@@ -188,17 +218,28 @@ systemctl restart kubelet
 ---
 
 ## Q10 - SBOM (Software Bill of Materials)
-**Task:** Generate an SBOM in SPDX JSON format for the image `nginx:1.24` and save it to `/opt/cks-lab/nginx-sbom.json` using `trivy`.
+**Task:** Generate a Software Bill of Materials (SBOM) in SPDX format for the image nginx:1.24. Save it to /opt/cks-lab/sbom.spdx on the host node. Use the bom CLI tool which is pre-installed on the node.
+
+Inspect the pod multi-pod in the default namespace. A vulnerable library was detected in one of its containers. Remove the container named vulnerable-app from the pod.
+
+Note: Access the node via minikube ssh for the BOM tool.
 
 **Solution:** 
 ```bash
-trivy image --format spdx-json --output /opt/cks-lab/nginx-sbom.json nginx:1.24
+# 1. Generate BOM
+minikube ssh "bom generate --image nginx:1.24 -o /opt/cks-lab/sbom.spdx"
+
+# 2. Update Pod
+kubectl get pod multi-pod -o yaml > pod.yaml
+vi pod.yaml 
+# Delete the entire container block for 'vulnerable-app'
+kubectl replace --force -f pod.yaml
 ```
 
 ---
 
 ## Q11 - Pod Security Standards (PSS)
-**Task:** Enforce the `restricted` Pod Security Standard in the `frontend` namespace at the `enforce` level.
+**Task:** Configure the frontend namespace to enforce the restricted Pod Security Standard (PSS).
 
 **Solution:**
 ```bash
@@ -208,89 +249,198 @@ kubectl label ns frontend pod-security.kubernetes.io/enforce=restricted
 ---
 
 ## Q12 - ServiceAccount Token
-**Task:** Modify the ServiceAccount `db-sa` in the `database` namespace so that it no longer automounts API tokens into pods by default.
+**Task:** 
+1. Modify the ServiceAccount db-sa in the database namespace to prevent it from automatically mounting API tokens into pods.
+
+2. Create a new Pod named token-pod in the database namespace using the nginx image.
+
+3. Configure the Pod to use the db-sa ServiceAccount, and manually mount its token using a projected volume at the path /var/run/secrets/tokens.
 
 **Solution:** 
 ```bash
-kubectl edit sa db-sa -n database
-# Add the following line:
-# automountServiceAccountToken: false
+# 1. Disable automount
+kubectl edit sa db-sa -n database 
+# Add: automountServiceAccountToken: false
+
+# 2 & 3. Create Pod with Projected Volume
+kubectl run token-pod --image=nginx -n database --dry-run=client -o yaml > pod.yaml
+vi pod.yaml
+
+# Modify to match:
+spec:
+  serviceAccountName: db-sa
+  containers:
+  - name: token-pod
+    image: nginx
+    volumeMounts:
+    - mountPath: /var/run/secrets/tokens
+      name: token-vol
+  volumes:
+  - name: token-vol
+    projected:
+      sources:
+      - serviceAccountToken:
+          path: token
+          expirationSeconds: 7200
+          audience: api
+
+kubectl apply -f pod.yaml
 ```
 
 ---
 
 ## Q13 - Auditing
-**Task:** The security compliance team requires API server requests to be audited. An audit policy file has already been staged on the control plane node at /etc/kubernetes/audit/audit-policy.yaml. Configure the API server to use this policy file.
-(Note: For the scope of this simulation task, you only need to provide the flag pointing to the policy; you do not need to configure the log output destination or volume mounts).
+**Task:** The cluster must persist an audit log of all API server requests. An audit policy file is staged at /etc/kubernetes/audit/audit-policy.yaml.
+Configure the API server to use this policy file and write the audit logs to /var/log/k8s/audit.log. Ensure the API server mounts these host paths appropriately.
+
+Note: Access the node via minikube ssh.
 
 **Solution:** 
 ```bash
-vi /etc/kubernetes/manifests/kube-apiserver.yaml
-# Add the following flags:
+minikube ssh
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+
+# Add Flags:
 # - --audit-policy-file=/etc/kubernetes/audit/audit-policy.yaml
 # - --audit-log-path=/var/log/k8s/audit.log
-# - --audit-log-maxage=30
-# (Ensure volume mounts for these paths are also configured)
+
+# Add under volumeMounts:
+# - mountPath: /etc/kubernetes/audit
+#   name: audit-config
+#   readOnly: true
+# - mountPath: /var/log/k8s
+#   name: audit-log
+#   readOnly: false
+
+# Add under volumes:
+# - hostPath:
+#     path: /etc/kubernetes/audit
+#     type: DirectoryOrCreate
+#   name: audit-config
+# - hostPath:
+#     path: /var/log/k8s
+#     type: DirectoryOrCreate
+#   name: audit-log
 ```
 
 ---
 
 ## Q14 - SHA512SUM Verification
-**Task:** The incident response team suspects a binary replacement attack has occurred on the master node. A test binary named kube-apiserver-test and its expected SHA512 checksum file (kube-apiserver-test.sha512) are located in the /usr/local/bin/ directory on the node. Verify the integrity of the binary. If the hash does not match the provided checksum, permanently remove the compromised binary from the host.
+**Task:** A test binary named kube-apiserver-test and its expected SHA512 checksum file (kube-apiserver-test.sha512) are located in /usr/local/bin/ on the control plane node.
+Verify the integrity of the binary. If the hash does not match, permanently remove the compromised binary.
+
+Note: Access the node via minikube ssh.
 
 **Solution:** 
 ```bash
+minikube ssh
 cd /usr/local/bin/
 sha512sum -c kube-apiserver-test.sha512
-# If the verification output displays "FAILED", delete it:
-rm -f kube-apiserver-test*
+# Output will say FAILED
+sudo rm -f kube-apiserver-test*
+
 ```
 
 ---
 
-## Q15 - Trivy Image Scan
-**Task:** Scan the image `httpd:2.4.49` for CRITICAL vulnerabilities using `trivy`. Update the `web-server` deployment in the `dmz` namespace to `httpd:2.4.58` to resolve them.
+## Q15 -
+**Task:** The Deployment web-server in the dmz namespace is currently running httpd:2.4.49. Update the deployment image to httpd:2.4.58 to resolve a CRITICAL known vulnerability.
 
 **Solution:** 
 ```bash
-trivy image --severity CRITICAL httpd:2.4.49
 kubectl set image deploy/web-server httpd=httpd:2.4.58 -n dmz
 ```
 
 ---
 
-## Q16 - RootOnlyFileSystem
-**Task:** Modify the Pod `immutable-pod` in the `default` namespace to ensure its root filesystem is mounted as read-only.
+## Q16 -
+**Task:** Modify the Pod immutable-pod in the default namespace to enforce container immutability. Specifically, ensure its root filesystem is mounted as read-only.
 
 **Solution:** 
 ```bash
-# Note: Pod configurations are immutable. You must copy, modify, and replace it.
-kubectl get pod immutable-pod -o json > pod.json
-vi pod.json
+kubectl get pod immutable-pod -o yaml > pod.yaml
+vi pod.yaml 
 # Under spec.containers[0].securityContext, add:
 # readOnlyRootFilesystem: true
-kubectl delete pod immutable-pod --force
-kubectl apply -f pod.json && rm pod.json
+kubectl replace --force -f pod.yaml
 ```
 
 ---
 
 ## Q17 - Secrets Encryption at Rest
-**Task:** Kubernetes Secrets are currently being stored in plaintext within etcd. Secure the cluster by ensuring the API server is properly configured to encrypt secrets at rest using the pre-staged template configuration found at /etc/kubernetes/encryption/encryption-config.yaml.
-(Note: You must generate a random base64 32-byte key, add it to the secret box inside the config, and wire it up to the API server).
+**Task:** Kubernetes Secrets are currently unencrypted in etcd.
+
+The API server has a pre-staged EncryptionConfiguration file at /etc/kubernetes/encryption/encryption-config.yaml.
+
+Generate a random 32-byte base64 key and add it to the configuration file using the secretbox provider.
+
+Configure the API Server to utilize this configuration.
+
+Note: Access the node via minikube ssh.
 
 **Solution:** 
 ```bash
-# 1. Generate the key
+minikube ssh
+sudo -i
+
+# 1. Get the key
 head -c 32 /dev/urandom | base64
 
-# 2. Populate the key inside /etc/kubernetes/encryption/encryption-config.yaml
+# 2. Edit config
 vi /etc/kubernetes/encryption/encryption-config.yaml
-# Change identity: {} provider to a secretbox provider containing your generated key.
+# Replace {RAND_KEY} with the generated string.
 
-# 3. Reference the configuration file in the API Server
+# 3. Edit API Server
 vi /etc/kubernetes/manifests/kube-apiserver.yaml
-# Add the flag:
+# Add flag:
 # - --encryption-provider-config=/etc/kubernetes/encryption/encryption-config.yaml
-# Ensure volumeMounts and volumes for /etc/kubernetes/encryption are configured.
+# (Ensure volume mounts for /etc/kubernetes/encryption exist)
+exit
+```
+## Q18 
+**Task:** Create a Kubernetes TLS secret named secure-tls in the default namespace. Use the raw certificate and key files located at /opt/cks-lab/tls.crt and /opt/cks-lab/tls.key on the base terminal.
+
+```bash
+kubectl create secret tls secure-tls --cert=/opt/cks-lab/tls.crt --key=/opt/cks-lab/tls.key -n default
+```
+
+## Q19
+**Task:** An Ingress resource named secure-ingress exists in the default namespace. Currently, it accepts HTTP traffic. Update the Ingress configuration to strictly enforce an SSL redirect.
+
+```bash
+kubectl edit ingress secure-ingress -n default
+# Add under metadata.annotations:
+#   nginx.ingress.kubernetes.io/ssl-redirect: "true"
+```
+
+## Q20
+**Task:** A node forensics audit revealed that an unauthorized user (unauthorized_user) has been attached to the Docker daemon group, and the Docker socket (/var/run/docker.sock) is incorrectly owned by this user.
+Remove the user from the docker group and restore ownership of the socket to root.
+
+Note: Access the node via minikube ssh.
+
+```bash
+minikube ssh
+sudo -i
+gpasswd -d unauthorized_user docker
+chown root:docker /var/run/docker.sock
+exit
+```
+
+---
+
+### Question 21 | Weight: 5%
+
+**Context:**  
+`kubectl config use-context minikube`
+
+**Task:**  
+You need to audit an older image before it is approved for use in the cluster.
+1. Use `trivy` to scan the image `httpd:2.4.49` for `CRITICAL` vulnerabilities. 
+2. Save the scan results in `json` format to `/opt/cks-lab/trivy-report.json` on the base terminal.
+
+<details><summary><b>Reveal Solution</b></summary>
+
+```bash
+trivy image --severity CRITICAL --format json --output /opt/cks-lab/trivy-report.json httpd:2.4.49
 ```

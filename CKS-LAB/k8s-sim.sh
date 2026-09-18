@@ -112,9 +112,10 @@ function score_exam() {
         echo "✅ Q14: Compromised binary deleted (+5)"; ((SCORE+=5))
     fi
 
-    # Q15: Trivy Image Update
+    # Q15: Vulnerable image updated (Leave this as it was)
     if [[ $(kubectl get deploy web-server -n dmz -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null) == "httpd:2.4.58" ]]; then
-        echo "✅ Q15: Vulnerable image updated (+5)"; ((SCORE+=5))
+        echo "✅ Q15: Vulnerable image updated (+5)"
+        ((SCORE+=5))
     fi
 
     # Q16: RootOnlyFS
@@ -142,8 +143,14 @@ function score_exam() {
         echo "✅ Q20: Host Docker daemon secured (+5)"; ((SCORE+=5))
     fi
 
+    # Q21: Trivy Image Scan (NEW)
+    if [ -f "$JUMPBOX_DIR/trivy-report.json" ]; then
+        echo "✅ Q21: Trivy scan report generated (+5)"
+        ((SCORE+=5))
+    fi
+
     echo "---------------------------"
-    echo "FINAL SCORE: $SCORE / 100"
+    echo "FINAL SCORE: $SCORE / 105"
 }
 
 case "$1" in
