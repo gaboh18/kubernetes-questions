@@ -1,0 +1,29 @@
+# Requires a real Cilium CNI with mutual authentication/SPIRE enabled.
+# This is an example solution, never applied by simulator setup.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: invoices-auth
+  namespace: exam-mesh
+spec:
+  endpointSelector:
+    matchLabels:
+      app: invoices
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: exam-allowed
+    authentication:
+      mode: required
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
+  - fromEntities:
+    - host
+    authentication:
+      mode: disabled
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
