@@ -19,8 +19,9 @@ cd /Users/gabo/Documents/Proyectos/kubernetes-questions/CKS-LAB/secon_version
 ./k8s-sim.sh start
 ```
 
-3. Wait for **“Session started: 120 minutes”**. Setup may download images on the first run. The two-hour countdown starts only after setup succeeds.
-4. Display the questions:
+3. Each `start` automatically saves the previous attempt under `../.cks-state/archives/`, removes the previous owned lab cluster and creates a fresh exam. Local answers, timing information, Kubernetes resource snapshots and available node files are backed up first. Use `time`, `score` or `kubectl` to continue working on your current attempt.
+4. Wait for **“Session started: 120 minutes”**. Setup may download images on the first run. The two-hour countdown starts only after setup succeeds.
+5. Display the questions:
 
 ```bash
 ./k8s-sim.sh tasks
@@ -74,7 +75,11 @@ When you want to remove the lab cluster, run:
 ./k8s-sim.sh cleanup
 ```
 
-Cleanup removes only the owned `cks-lab` profile and retains your local answers. Before another attempt, archive the parent `.cks-state/jumpbox` directory; startup refuses to overwrite existing answers or reuse an existing cluster profile.
+Manual cleanup is optional. For another attempt, simply run `./k8s-sim.sh start` again: it archives the old attempt and performs cleanup automatically. Manual `cleanup` removes only the owned `cks-lab` profile and retains your local answer files.
+
+Backups are kept in the parent `.cks-state/archives/<timestamp>_<unique-id>/` directory. Each contains the previous `jumpbox/` and session metadata. When a previous cluster is available, `cluster-resources.json` saves its workload/configuration objects and `node-files.tar.gz` saves its `/opt/cks-lab` files. Archives are private to your user because they include lab Secrets and certificate keys. The new archive path is printed during startup. Archives are never removed automatically.
+
+Startup stops before deleting the old cluster if it cannot verify ownership or create the backup. If local answers change after the snapshot, it retains those files and stops before starting the new exam. If the API is unavailable, restore lab access first. If deletion fails, the current local answers and timer remain in place and the backup is retained.
 
 ## Shared runtime and file locations
 
