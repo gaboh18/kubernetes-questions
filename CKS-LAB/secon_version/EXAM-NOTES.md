@@ -2,7 +2,7 @@
 
 Read before starting the mock. The question sheet uses a host information box, a short context and a task specification for each exercise. These are original training questions, not reproduced exam questions or a promise of the exact current ExamUI wording. The [official CKS instructions](https://docs.linuxfoundation.org/tc-docs/certification/important-instructions-cks) describe designated SSH hosts, a host information box at the start of each task and returning to the base host between tasks. This lab adapts that workflow to a Mac terminal and Minikube.
 
-The [candidate report](https://www.reddit.com/r/KubernetesCerts/comments/1rzoh2s/passed_cks_heres_what_actually_came_up/) inspired the topic sequence. The 16 tasks, workloads and weights are local training choices. See [sources](EXAM-SOURCES.md) for technical corrections and broader preparation topics. The question formatting was revised on 5 November 2026; scenario setup, timer and grading were unchanged.
+The [candidate report](https://www.reddit.com/r/KubernetesCerts/comments/1rzoh2s/passed_cks_heres_what_actually_came_up/) inspired the topic sequence. The 16 tasks, workloads and weights are local training choices. See [sources](EXAM-SOURCES.md) for technical corrections and broader preparation topics. Scenario revision 2, introduced on 5 November 2026, deliberately initializes the required local repairs as unfinished and verifies the starting state before the timer begins. Weights and the automatic scoring ceiling are unchanged.
 
 ## Environment and paths
 
@@ -19,6 +19,24 @@ The launcher in `secon_version` uses the parent `CKS-LAB` runtime and creates a 
 The task and solution sheets use explicit Mac paths for local file operations. The launcher resolves file arguments passed to its kubectl wrapper from the parent `CKS-LAB` directory. For example, `vim ../.cks-state/jumpbox/tls.crt` from this folder and the wrapper's `--cert=.cks-state/jumpbox/tls.crt` argument refer to the same file. The solution guide labels Mac, SSH and external-lab commands separately.
 
 Copied configuration is not activated. Never overwrite active Minikube API server, kubelet or etcd configuration with the supplied copies. External environments, controllers and tools named as prerequisites are not created automatically.
+
+## Starting-state contract
+
+A fresh revision-2 exam must begin with the following faults. Startup reads back the uploaded copies and the actual workload objects; it stops before the timer if an assigned field is already repaired or the fixtures do not match.
+
+| Tasks | Deliberate starting faults |
+| --- | --- |
+| 1 | Anonymous kubelet access enabled, webhook authentication disabled, AlwaysAllow authorization, etcd client certificates not required and an incorrect client CA path. All five changes are yours to make. |
+| 3, 5 | Explicit root UID, writable root filesystem, privileged execution and privilege escalation enabled. |
+| 6 | Incomplete audit coverage, Secret bodies recorded, incorrect policy/log paths and all three retention limits wrong; required mounts absent. |
+| 9 | Existing Pod and ServiceAccount both enable automount; explicit projection has the wrong filename, audience, lifetime, mount path and read-only setting. Recreate the Pod with the correct complete specification. |
+| 12 | Explicit root identity, non-root disabled, Unconfined seccomp, privileged execution, privilege escalation, no ALL capability drop and an added SYS_ADMIN capability. Restricted admission blocks the Pods. |
+| 15, 16 | ImagePolicyWebhook and NodeRestriction explicitly disabled and absent from the enabled list; wrong admission-file path, fail-open webhook, missing mount, anonymous API access and AlwaysAllow authorization in the copy. |
+| 2, 4, 7, 11 | Required Secret/policies/reports/findings are absent; the incident is not contained and both inventory containers remain present. Healthy applications, certificate inputs and test clients are prerequisites for these tasks. |
+
+The setup records the successful local starting checks in the existing private `exam-expected.json` session metadata. It does not overwrite an in-progress attempt when you update the scripts. Use `start` when you are ready for a new attempt. Old attempts retain their original starting state.
+
+External tasks 8, 10, 13 and 14 still require their documented controller/host/cluster prerequisites. This revision does not pretend those systems are supplied. Their runtime verification and the component-copy exercises remain manual/external.
 
 ## What can be graded locally
 

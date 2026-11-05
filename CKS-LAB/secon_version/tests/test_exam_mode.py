@@ -144,12 +144,14 @@ class ExamGradingTests(unittest.TestCase):
             state, files = Path(tmp), Path(tmp) / 'exam'
             objects, commands = [], []
             runtime = {'items': [ready_pod(name + '-pod', 'exam-runtime', name) for name in ('orders', 'ledger', 'reporting')]}
-            with patch.object(exam, 'STATE', state), patch.object(exam, 'FILES', files), patch.object(exam, 'check_owner'), patch.object(exam, 'apply', side_effect=objects.append), patch.object(exam.core, 'command', side_effect=lambda args, *a, **kw: commands.append(args) or ''), patch.object(exam.core, 'get', return_value=runtime), patch.object(exam, 'network_probe', return_value=True) as probe:
+            with patch.object(exam, 'STATE', state), patch.object(exam, 'FILES', files), patch.object(exam, 'check_owner'), patch.object(exam, 'prepare_component_fixtures', return_value={'components': True}), patch.object(exam, 'verify_starting_workloads', return_value={'workloads': True}), patch.object(exam, 'apply', side_effect=objects.append), patch.object(exam.core, 'command', side_effect=lambda args, *a, **kw: commands.append(args) or ''), patch.object(exam.core, 'get', return_value=runtime), patch.object(exam, 'network_probe', return_value=True) as probe:
                 exam.setup()
             deployments = {o['metadata']['name']: o for o in objects if o['kind'] == 'Deployment'}
             tls = deployments['certificate-reader']['spec']['template']['spec']
             self.assertEqual(tls['volumes'][0]['secret']['secretName'], 'site-tls')
             self.assertTrue(deployments['locked-app']['spec']['template']['spec']['containers'][0]['securityContext']['privileged'])
+            self.assertTrue(all(exam.verify_workload_faults(objects).values()))
+            self.assertEqual(json.loads((state / 'exam-expected.json').read_text())['scenario_revision'], 2)
             self.assertEqual(probe.call_count, 3)
             self.assertEqual(len((files / 'runtime-events.jsonl').read_text().splitlines()), 3)
             self.assertEqual(len(json.loads((state / 'exam-expected.json').read_text())['candidates']), 2)
@@ -164,7 +166,8 @@ class ExamLifecycleTests(unittest.TestCase):
     def test_exam_start_requests_two_nodes_and_no_timer_on_failed_baseline(self):
         import shutil
         (self.root / 'secon_version').mkdir()
-        shutil.copy2(ROOT / 'secon_version' / 'exam_mode.py', self.root / 'secon_version' / 'exam_mode.py')
+        for name in ('exam_mode.py', 'scenario_fixtures.py'):
+            shutil.copy2(ROOT / 'secon_version' / name, self.root / 'secon_version' / name)
         result = self.run_lab('start', '--exam')
         self.assertNotEqual(result.returncode, 0)  # Fake cluster has no Ready probe endpoints.
         self.assertIn('--nodes=2', self.log.read_text())

@@ -120,7 +120,7 @@ The mock shares the parent simulator's guarded runtime, `cks-lab` profile and `.
 
 Run the task and solution commands from `secon_version`. **For Mac commands such as `vim`, use `../.cks-state/jumpbox/exam/`; shared certificates are in `../.cks-state/jumpbox/`.** The launcher resolves file arguments passed to its kubectl wrapper from the parent `CKS-LAB` directory, so wrapper arguments such as `--cert=.cks-state/jumpbox/tls.crt` omit `../`. Commands in the solution guide use the appropriate path for each case. Node paths such as `/opt/cks-lab/exam` are inside the node and stay the same.
 
-The automatic score ceiling remains 47/100; 53 points require manual/external evidence. This folder move does not change the scenarios or scoring.
+The automatic score ceiling remains 47/100; 53 points require manual/external evidence. Scenario revision 2 starts the assigned local controls in explicitly incorrect states and audits those faults before the timer begins. See [the starting-state contract](EXAM-NOTES.md#starting-state-contract). Updating the files preserves your current attempt; run `start` when ready to archive it and begin the revised scenarios.
 
 Run the mock-specific offline tests from this folder:
 

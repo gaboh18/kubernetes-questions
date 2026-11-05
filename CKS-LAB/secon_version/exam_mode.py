@@ -4,12 +4,14 @@ import base64
 import json
 from pathlib import Path
 import secrets
+import shlex
 import subprocess
 import sys
 
 # Shared runtime stays in the original simulator directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import score as core
+from scenario_fixtures import component_fixtures, insecure_container, verify_component_faults, verify_workload_faults
 
 ROOT, STATE = core.ROOT, core.STATE
 FILES = core.JUMPBOX / 'exam'
@@ -44,9 +46,54 @@ def check_owner():
         raise core.EvidenceError('cluster ownership mismatch')
 
 
+def prepare_component_fixtures():
+    sources = [core.command(core.PREFIX + ['ssh', '--', 'sudo cat ' + path]) for path in (
+        '/var/lib/kubelet/config.yaml', '/etc/kubernetes/manifests/etcd.yaml',
+        '/etc/kubernetes/manifests/kube-apiserver.yaml')]
+    fixtures = component_fixtures(*sources)
+    # Only these fixed staging paths are writable. No active manifest appears
+    # on the destination side of any command.
+    commands = ['set -eu', 'mkdir -p /opt/cks-lab/exam /opt/cks-lab/audit /opt/cks-lab/image-config']
+    for relative, content in fixtures.items():
+        encoded = base64.b64encode(content.encode()).decode()
+        commands.append('printf %s ' + shlex.quote(encoded) + ' | base64 --decode > ' +
+                        shlex.quote('/opt/cks-lab/' + relative))
+    core.command(core.PREFIX + ['ssh', '--', '; '.join(commands)])
+    uploaded = {relative: core.command(core.PREFIX + ['ssh', '--', 'cat /opt/cks-lab/' + relative])
+                .replace('\r\n', '\n') for relative in fixtures}
+    if uploaded != fixtures:
+        raise core.EvidenceError('staged component fixture verification failed')
+    return verify_component_faults(uploaded)
+
+
+def verify_starting_workloads():
+    objects = [core.get('deployment', name, ns) for ns, name in (
+        ('exam-build', 'build-app'), ('exam-immutable', 'immutable-app'),
+        ('exam-restricted', 'locked-app'))]
+    objects.extend([core.get('serviceaccount', 'app-sa', 'exam-tokens'),
+                    core.get('pod', 'token-client', 'exam-tokens')])
+    checks = verify_workload_faults(objects)
+    # Creation/incident tasks must start unfinished too. Data and healthy test
+    # endpoints are prerequisites, not repairs performed on the candidate's behalf.
+    secrets_list = core.get('secrets', namespace='exam-tls').get('items', [])
+    checks['02.missing-secret'] = not any(o['metadata']['name'] == 'site-tls' for o in secrets_list)
+    checks['07.no-allow-or-deny-policy'] = not core.get('networkpolicies', namespace='exam-backend').get('items')
+    checks['11.both-containers-present'] = len(core.get('deployment', 'inventory', 'exam-supply')['spec']['template']['spec']['containers']) == 2
+    for name in ('orders', 'ledger', 'reporting'):
+        checks['04.' + name + '-not-contained'] = core.get('deployment', name, 'exam-runtime')['spec'].get('replicas', 1) == 1
+    checks['03.root-image-user'] = 'USER root' in (FILES / 'Dockerfile').read_text()
+    checks['04.no-completed-rule'] = (FILES / 'falco_rules.local.yaml').read_text().strip().startswith('#')
+    for name in ('incident.json', 'findings.json', 'amber.spdx', 'cobalt.spdx'):
+        checks['output-missing.' + name] = not (FILES / name).exists()
+    if not all(checks.values()):
+        raise core.EvidenceError('starting workload audit failed: ' + ', '.join(k for k, value in checks.items() if not value))
+    return checks
+
+
 def setup():
     check_owner()
     FILES.mkdir(parents=True, exist_ok=False)
+    component_checks = prepare_component_fixtures()
     namespaces = ['exam-tls', 'exam-build', 'exam-runtime', 'exam-immutable', 'exam-backend',
                   'exam-allowed', 'exam-denied', 'exam-tokens', 'exam-supply', 'exam-restricted',
                   'exam-ingress', 'exam-mesh']
@@ -57,8 +104,9 @@ def setup():
         'containers': [{'name': 'app', 'image': 'busybox:1.37', 'command': ['sleep', '86400'],
                         'volumeMounts': [{'name': 'tls', 'mountPath': '/tls', 'readOnly': True}]}],
         'volumes': [{'name': 'tls', 'secret': {'secretName': 'site-tls'}}]}))
-    apply(deployment('build-app', 'exam-build'))
-    apply(deployment('immutable-app', 'exam-immutable'))
+    for name, namespace in [('build-app', 'exam-build'), ('immutable-app', 'exam-immutable')]:
+        apply(deployment(name, namespace, [{'name': 'app', 'image': 'busybox:1.37',
+            'command': ['sleep', '86400'], 'securityContext': insecure_container()}]))
     for name in ('orders', 'ledger', 'reporting'):
         apply(deployment(name, 'exam-runtime'))
     # Native HTTP server makes allowed/denied network behavior testable.
@@ -72,7 +120,14 @@ def setup():
     for ns in ('exam-allowed', 'exam-denied', 'exam-backend'):
         apply({'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': 'probe', 'namespace': ns},
                'spec': {'containers': [{'name': 'probe', 'image': 'busybox:1.37', 'command': ['sleep', '86400']}]}})
-    apply({'apiVersion': 'v1', 'kind': 'ServiceAccount', 'metadata': {'name': 'app-sa', 'namespace': 'exam-tokens'}})
+    apply({'apiVersion': 'v1', 'kind': 'ServiceAccount', 'metadata': {'name': 'app-sa', 'namespace': 'exam-tokens'},
+           'automountServiceAccountToken': True})
+    apply({'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': 'token-client', 'namespace': 'exam-tokens'},
+           'spec': {'serviceAccountName': 'app-sa', 'automountServiceAccountToken': True,
+                    'containers': [{'name': 'app', 'image': 'busybox:1.37', 'command': ['sleep', '86400'],
+                        'volumeMounts': [{'name': 'legacy-token', 'mountPath': '/var/run/secrets/legacy', 'readOnly': False}]}],
+                    'volumes': [{'name': 'legacy-token', 'projected': {'sources': [{'serviceAccountToken': {
+                        'path': 'old-token', 'audience': 'legacy-api', 'expirationSeconds': 600}}]}}]}})
     # Random container/image assignment requires investigation, not a known name.
     images = ['alpine:3.19.1', 'busybox:1.37']
     if secrets.randbelow(2):
@@ -83,8 +138,11 @@ def setup():
     # Deployment creation succeeds; admission rejects its Pod until repaired.
     core.command(K + ['label', 'namespace', 'exam-restricted', 'pod-security.kubernetes.io/enforce=restricted',
                       'pod-security.kubernetes.io/enforce-version=v1.35', '--overwrite'])
-    apply(deployment('locked-app', 'exam-restricted', [{'name': 'app', 'image': 'busybox:1.37',
-                      'command': ['sleep', '86400'], 'securityContext': {'privileged': True}}]))
+    apply(deployment('locked-app', 'exam-restricted', spec={
+        'securityContext': {'runAsNonRoot': False, 'runAsUser': 0, 'seccompProfile': {'type': 'Unconfined'}},
+        'containers': [{'name': 'app', 'image': 'busybox:1.37', 'command': ['sleep', '86400'],
+                        'securityContext': {'privileged': True, 'allowPrivilegeEscalation': True,
+                                            'capabilities': {'add': ['SYS_ADMIN']}}}]}))
     healthy = [('exam-build', 'build-app'), ('exam-immutable', 'immutable-app'),
                ('exam-runtime', 'orders'), ('exam-runtime', 'ledger'), ('exam-runtime', 'reporting'),
                ('exam-backend', 'api'), ('exam-ingress', 'web'), ('exam-supply', 'inventory')]
@@ -92,6 +150,7 @@ def setup():
         core.command(K + ['rollout', 'status', f'deployment/{name}', '-n', ns, '--timeout=180s'], timeout_seconds=200)
     for ns in ('exam-allowed', 'exam-denied', 'exam-backend'):
         core.command(K + ['wait', '--for=condition=Ready', 'pod/probe', '-n', ns, '--timeout=180s'], timeout_seconds=200)
+    core.command(K + ['wait', '--for=condition=Ready', 'pod/token-client', '-n', 'exam-tokens', '--timeout=180s'], timeout_seconds=200)
     # Record a *working* network baseline before the candidate adds policies.
     if not network_probe('exam-allowed') or not network_probe('exam-denied') or not network_probe('exam-backend'):
         raise core.EvidenceError('network baseline failed; mock is not ready')
@@ -109,12 +168,11 @@ def setup():
     (FILES / 'falco_rules.local.yaml').write_text('# Add your custom Falco rule here.\n')
     expected = {'culprit': culprit, 'candidates': candidates,
                 'removed': next(n for n, image in candidates.items() if image.startswith('alpine:'))}
+    workload_checks = verify_starting_workloads()
+    expected['scenario_revision'] = 2
+    expected['starting_faults'] = {**component_checks, **workload_checks}
     (STATE / 'exam-expected.json').write_text(json.dumps(expected))
-    # Preserve real-shaped component files for review; do not activate them.
-    core.command(core.PREFIX + ['ssh', '--', 'set -e; mkdir -p /opt/cks-lab/exam; '
-                 'sudo cat /etc/kubernetes/manifests/etcd.yaml > /opt/cks-lab/exam/etcd.yaml; '
-                 'cp /opt/cks-lab/kubelet-config.yaml /opt/cks-lab/exam/kubelet-config.yaml; '
-                 'cp /opt/cks-lab/kube-apiserver.yaml /opt/cks-lab/exam/kube-apiserver.yaml'])
+    print(f'Local starting-state audit passed: {len(expected["starting_faults"])} intentionally unfinished checks. External prerequisites remain separate.')
 
 
 def pods(name, ns):

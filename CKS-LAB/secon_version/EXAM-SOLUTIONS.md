@@ -94,13 +94,13 @@ Under `spec.containers`, locate the etcd container's existing `command` list. En
 - --client-cert-auth=true
 ```
 
-Keep its existing `--trusted-ca-file`, `--cert-file` and `--key-file` arguments. The trusted CA must be the etcd CA already mounted in this manifest. Inspect the existing certificate arguments rather than copying guessed paths:
+The client CA argument is deliberately incorrect. Change `--trusted-ca-file` to the same CA path shown by the unchanged `--peer-trusted-ca-file` argument. Preserve the existing server certificate/key arguments, peer TLS and data paths. Inspect the arguments first:
 
 ```bash
 grep -E -- 'client-cert-auth|trusted-ca-file|cert-file|key-file|peer-|data-dir' /opt/cks-lab/exam/etcd.yaml
 ```
 
-If `--client-cert-auth` already exists, change that entry rather than adding a conflicting second one. The supplied etcd copy may already require client certificates; preserve that correct setting. Leave peer TLS and the data directory unchanged.
+Change the existing `--client-cert-auth=false` entry to `true` and replace the incorrect client CA path; do not add conflicting duplicate flags. Both etcd faults must be repaired. All three kubelet fields above also start wrong in a fresh revision-2 exam.
 
 ### 3. Check and return to your Mac
 
@@ -611,7 +611,16 @@ curl --cacert ../.cks-state/jumpbox/exam/ingress.crt \
 k patch serviceaccount app-sa -n exam-tokens --type=merge --patch '{"automountServiceAccountToken":false}'
 ```
 
-### 2. Create the Pod with the requested projection
+### 2. Inspect and recreate the misconfigured Pod
+
+The supplied Pod has automount enabled and the wrong projection audience, lifetime, filename, mount directory and mount access. Those Pod fields require recreation. Inspect it, then remove only this exercise Pod:
+
+```bash
+k get pod token-client -n exam-tokens -o yaml
+k delete pod token-client -n exam-tokens --wait=true
+```
+
+Create its corrected replacement with the same image and command:
 
 ```bash
 k apply -f - <<'YAML'
@@ -642,7 +651,7 @@ spec:
 YAML
 ```
 
-If you previously created `token-client` with different immutable fields, inspect it and recreate **only that task Pod** before applying this manifest. A failed apply does not update immutable fields.
+Deleting and recreating this one Pod removes its previously injected automatic token volume as well as replacing the incorrect explicit projection. Do not delete the namespace or ServiceAccount.
 
 ### 3. Verify without printing the token
 
@@ -845,12 +854,13 @@ spec:
           privileged: false
           allowPrivilegeEscalation: false
           capabilities:
+            add: null
             drop:
             - ALL
 '
 ```
 
-The Pod-level identity and seccomp settings apply to the application container. The container drops capabilities and disables privileged execution/escalation. This matches the supplied sleeping workload; other applications may require additional compatibility changes. [Restricted controls](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
+The Pod-level identity and seccomp settings replace the explicit root identity and Unconfined profile. The container disables privileged execution/escalation, drops capabilities and removes the preconfigured `SYS_ADMIN` addition. In a strategic merge patch, `add: null` deletes that old field; adding `drop: [ALL]` alone would leave the forbidden addition in place. This matches the supplied sleeping workload; other applications may require additional compatibility changes. [Restricted controls](https://kubernetes.io/docs/concepts/security/pod-security-standards/).
 
 ### 3. Verify admission and availability
 
@@ -1028,14 +1038,14 @@ If you added other admission configurations, preserve their entries. `defaultAll
 vim /opt/cks-lab/exam/kube-apiserver.yaml
 ```
 
-In the API server's existing command list, find `--enable-admission-plugins`. Append `ImagePolicyWebhook` to its comma-separated value, retaining the existing plugins. For example, if the current value is only `NodeRestriction`, the result is:
+In the API server's existing command list, find `--enable-admission-plugins`. Append `ImagePolicyWebhook` to its comma-separated value, retaining the other existing plugins. For example, if the current value is only `NamespaceLifecycle`, the result is:
 
 ```yaml
-- --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+- --enable-admission-plugins=NamespaceLifecycle,ImagePolicyWebhook
 - --admission-control-config-file=/opt/cks-lab/image-config/admission-configuration.yaml
 ```
 
-Add the configuration-file argument if missing; do not create duplicate flags. For a real installation, check whether its Kubernetes version also requires enabling `imagepolicy.k8s.io/v1alpha1` through `--runtime-config`, preserving other runtime settings.
+Replace the deliberately incorrect configuration-file argument; do not create duplicate flags. Also find `--disable-admission-plugins` and remove **only `ImagePolicyWebhook`** from that list. Leave `NodeRestriction` for task 16 and preserve any unrelated disabled plugins. Enabling and explicitly disabling the same plugin is not a valid repair. For a real installation, check whether its Kubernetes version also requires enabling `imagepolicy.k8s.io/v1alpha1` through `--runtime-config`, preserving other runtime settings.
 
 ### 3. Mount the directory containing both files
 
@@ -1062,7 +1072,7 @@ Mounting the directory makes both the admission YAML and webhook kubeconfig avai
 
 ```bash
 cat /opt/cks-lab/image-config/admission-configuration.yaml
-grep -n -E 'enable-admission|admission-control-config|cks-image-policy|/opt/cks-lab/image-config' /opt/cks-lab/exam/kube-apiserver.yaml
+grep -n -E 'enable-admission|disable-admission|admission-control-config|cks-image-policy|/opt/cks-lab/image-config' /opt/cks-lab/exam/kube-apiserver.yaml
 kubectl get nodes
 exit
 ```
@@ -1098,18 +1108,18 @@ In the API server container's `command` list, ensure:
 - --authorization-mode=Node,RBAC
 ```
 
-Find `--enable-admission-plugins` and ensure `NodeRestriction` is in its existing comma-separated list. If you completed task 15 and those are the only explicitly configured plugins, that entry should remain:
+Find `--enable-admission-plugins` and append `NodeRestriction` to its existing comma-separated list. For example, if task 15 left `NamespaceLifecycle,ImagePolicyWebhook`, it becomes:
 
 ```yaml
-- --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+- --enable-admission-plugins=NamespaceLifecycle,ImagePolicyWebhook,NodeRestriction
 ```
 
-Preserve any other plugins already present. Do not add a second `--enable-admission-plugins` flag or remove the audit/admission mounts from earlier tasks. Some required values may already be correct in the supplied copy.
+Preserve any other plugins already present. Do not add a second `--enable-admission-plugins` flag or remove the audit/admission mounts from earlier tasks. Remove `NodeRestriction` from `--disable-admission-plugins` too. If the disabled list becomes empty, remove that entire argument; otherwise retain its unrelated entries. Fresh revision-2 copies deliberately have all three task-16 controls wrong.
 
 ### 3. Verify the saved values
 
 ```bash
-grep -n -E -- '--anonymous-auth|--authorization-mode|--enable-admission-plugins' /opt/cks-lab/exam/kube-apiserver.yaml
+grep -n -E -- '--anonymous-auth|--authorization-mode|--enable-admission-plugins|--disable-admission-plugins' /opt/cks-lab/exam/kube-apiserver.yaml
 kubectl get nodes
 exit
 ```

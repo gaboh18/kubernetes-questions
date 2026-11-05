@@ -23,14 +23,14 @@ Review [lab scope and grading](EXAM-NOTES.md) before beginning. Open [solutions]
 
 **Context**
 
-A security review identified insufficient authentication controls in the node and etcd configurations.
+A security review identified five authentication and authorization faults in the supplied node and etcd configurations.
 
 **Task**
 
 Update the supplied configuration files so that:
 
-- The kubelet rejects anonymous requests, retains webhook authentication and uses webhook authorization.
-- etcd requires a valid client certificate signed by its trusted CA for client connections.
+- The kubelet rejects anonymous requests, enables webhook authentication and uses webhook authorization.
+- etcd requires a valid client certificate signed by its trusted CA for client connections. Restore the client CA path using the unchanged peer CA reference in the supplied manifest.
 - Existing peer TLS settings, certificate paths and data paths are preserved.
 
 Save the corrected copies at their original paths. Do not apply them to the running Minikube components.
@@ -134,7 +134,7 @@ Ensure one replica is available with the required runtime settings.
 
 **Context**
 
-The cluster requires an audit trail of API activity without exposing Secret request or response bodies.
+The supplied audit configuration has incomplete coverage, exposes Secret bodies and uses incorrect log settings. The cluster requires metadata for every API operation.
 
 **Task**
 
@@ -201,15 +201,15 @@ Verify the HTTP redirect and a successful HTTPS response using the correct host 
 **Weight:** 6%
 
 > **Host:** `cks-lab` · **Namespace:** `exam-tokens`
-> **ServiceAccount:** `app-sa` · **New Pod:** `token-client`
+> **ServiceAccount:** `app-sa` · **Existing Pod:** `token-client`
 
 **Context**
 
-An application must receive an explicitly configured token instead of an automatically mounted API credential.
+An existing application automatically mounts API credentials and has an incorrectly configured explicit token projection.
 
 **Task**
 
-Disable automatic ServiceAccount token mounting on `app-sa` and on a new Pod named `token-client` that uses this ServiceAccount.
+Disable automatic ServiceAccount token mounting on `app-sa` and repair the existing Pod `token-client`, keeping it on that ServiceAccount. Recreate only this Pod if required to change immutable fields.
 
 Configure the Pod with a projected ServiceAccount token having these properties:
 
@@ -221,7 +221,7 @@ Configure the Pod with a projected ServiceAccount token having these properties:
 | Requested lifetime | `3600` seconds |
 | Mount access | Read-only |
 
-Use a suitable long-running container and ensure the Pod is Ready.
+Preserve the application image and long-running command and ensure the replacement Pod is Ready.
 
 ---
 
@@ -344,7 +344,7 @@ Image admission must deny requests when the image policy backend cannot provide 
 
 **Task**
 
-Update the supplied configuration to enable `ImagePolicyWebhook` and set its `defaultAllow` value to `false`.
+Update the supplied configuration to enable `ImagePolicyWebhook`, remove its explicit disabling and set its `defaultAllow` value to `false`.
 
 Configure the copied API server manifest with the admission configuration flag and required file mounts. Preserve other required admission plugins and unrelated settings.
 
@@ -369,6 +369,6 @@ Update the copied API server manifest to:
 
 - Disable anonymous authentication.
 - Use `Node,RBAC` authorization.
-- Enable the `NodeRestriction` admission plugin while preserving other required plugins.
+- Enable the `NodeRestriction` admission plugin, remove its explicit disabling and preserve other required plugins.
 
 Preserve unrelated settings and your changes from the other API server tasks. Save the corrected copy at its original path, leaving the active manifest unchanged.
