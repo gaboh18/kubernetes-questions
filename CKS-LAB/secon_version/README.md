@@ -2,7 +2,8 @@
 
 This folder contains the 16-task, two-hour mock, its solutions and supporting files.
 
-- [EXAM.md](EXAM.md): tasks, points, requirements and fidelity limits.
+- [EXAM.md](EXAM.md): 16 exam-style questions with host information, context and task requirements.
+- [EXAM-NOTES.md](EXAM-NOTES.md): lab prerequisites, file locations, scoring limits and verification notes.
 - [EXAM-SOLUTIONS.md](EXAM-SOLUTIONS.md): solutions, commands and evidence checklists.
 - [EXAM-SOURCES.md](EXAM-SOURCES.md): sources and corrections.
 - `exam_mode.py`: scenario setup and scoring.
@@ -49,7 +50,39 @@ For an interactive worker session:
 ./k8s-sim.sh ssh --node cks-lab-m02
 ```
 
+Inside either SSH node, use `kubectl` directly:
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl edit deployment build-app -n exam-build
+```
+
+Setup exposes the bundled, cluster-matching client and a private kubeconfig on both nodes, for the SSH user and `sudo -i`. It uses the lab API address reachable between nodes and keeps TLS verification enabled. Existing shell sessions can run `source /etc/profile.d/cks-lab-kubectl.sh` or reconnect to pick up the connection setting.
+
 Run `exit` inside the node session to return to your Mac terminal before using the simulator commands again. Enter one node session at a time.
+
+## Use Vim
+
+The simulator uses **Vim** as its preferred editor. `kubectl edit` through the wrapper opens Vim on your Mac:
+
+```bash
+./k8s-sim.sh kubectl edit deployment build-app -n exam-build
+```
+
+Inside either node, edit files directly with Vim:
+
+```bash
+sudo vim /opt/cks-lab/exam/kube-apiserver.yaml
+```
+
+Setup installs Vim on both owned exam nodes and sets `EDITOR`, `VISUAL` and `KUBE_EDITOR` to `vim`. Installation finishes before the exam timer begins. Reconnect an existing SSH session to pick up the node defaults, or run `source /etc/profile.d/cks-lab-editor.sh` there.
+
+For plain `kubectl edit` outside the wrapper, set these in your current terminal:
+
+```bash
+export EDITOR=vim VISUAL=vim KUBE_EDITOR=vim
+```
 
 ## Timer and scoring
 
@@ -94,3 +127,7 @@ Run the mock-specific offline tests from this folder:
 ```bash
 python3 -B -m unittest discover -s tests -v
 ```
+
+## Backup troubleshooting
+
+If a backup fails, startup keeps the existing lab. The error gives the archive directory; inspect `node-backup.log` there for SSH diagnostics. After correcting the problem, run `./k8s-sim.sh start` again. The backup transfer handles Minikube's terminal-based SSH connection automatically.
