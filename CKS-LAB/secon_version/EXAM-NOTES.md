@@ -16,7 +16,7 @@ The launcher in `secon_version` uses the parent `CKS-LAB` runtime and creates a 
 | `../.cks-state/jumpbox/exam/` | Exam files on your Mac, relative to `secon_version` |
 | `../.cks-state/jumpbox/` | Shared certificate and key on your Mac, relative to `secon_version` |
 
-The task sheet uses explicit Mac paths. The solution sheet retains paths relative to the parent `CKS-LAB` directory because the launcher resolves command file arguments there. For example, edit `../.cks-state/jumpbox/tls.crt` from this folder; the wrapper's `--cert=.cks-state/jumpbox/tls.crt` argument resolves to the same file.
+The task and solution sheets use explicit Mac paths for local file operations. The launcher resolves file arguments passed to its kubectl wrapper from the parent `CKS-LAB` directory. For example, `vim ../.cks-state/jumpbox/tls.crt` from this folder and the wrapper's `--cert=.cks-state/jumpbox/tls.crt` argument refer to the same file. The solution guide labels Mac, SSH and external-lab commands separately.
 
 Copied configuration is not activated. Never overwrite active Minikube API server, kubelet or etcd configuration with the supplied copies. External environments, controllers and tools named as prerequisites are not created automatically.
 

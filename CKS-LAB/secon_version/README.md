@@ -4,7 +4,7 @@ This folder contains the 16-task, two-hour mock, its solutions and supporting fi
 
 - [EXAM.md](EXAM.md): 16 exam-style questions with host information, context and task requirements.
 - [EXAM-NOTES.md](EXAM-NOTES.md): lab prerequisites, file locations, scoring limits and verification notes.
-- [EXAM-SOLUTIONS.md](EXAM-SOLUTIONS.md): solutions, commands and evidence checklists.
+- [EXAM-SOLUTIONS.md](EXAM-SOLUTIONS.md): one step-by-step solution per task, with commands, Vim edits and expected results.
 - [EXAM-SOURCES.md](EXAM-SOURCES.md): sources and corrections.
 - `exam_mode.py`: scenario setup and scoring.
 - `examples/`: supporting policy example.
@@ -118,7 +118,7 @@ Startup stops before deleting the old cluster if it cannot verify ownership or c
 
 The mock shares the parent simulator's guarded runtime, `cks-lab` profile and `.cks-state` directory. Run one mock at a time. The original simulator remains in the parent directory; its `./k8s-sim.sh start --exam` command still works. This folder must stay inside `CKS-LAB` so the shared scripts remain available.
 
-**Artifact paths in the task/solution sheets are relative to the parent `CKS-LAB` directory.** From here, edit artifacts under `../.cks-state/jumpbox/exam/`; shared certificates are in `../.cks-state/jumpbox/`. The launcher resolves command file arguments from the parent, so the documented `--cert=.cks-state/...` commands still work. Node paths such as `/opt/cks-lab/exam` are unchanged.
+Run the task and solution commands from `secon_version`. **For Mac commands such as `vim`, use `../.cks-state/jumpbox/exam/`; shared certificates are in `../.cks-state/jumpbox/`.** The launcher resolves file arguments passed to its kubectl wrapper from the parent `CKS-LAB` directory, so wrapper arguments such as `--cert=.cks-state/jumpbox/tls.crt` omit `../`. Commands in the solution guide use the appropriate path for each case. Node paths such as `/opt/cks-lab/exam` are inside the node and stay the same.
 
 The automatic score ceiling remains 47/100; 53 points require manual/external evidence. This folder move does not change the scenarios or scoring.
 
