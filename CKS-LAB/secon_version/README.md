@@ -62,6 +62,19 @@ Setup exposes the bundled, cluster-matching client and a private kubeconfig on b
 
 Run `exit` inside the node session to return to your Mac terminal before using the simulator commands again. Enter one node session at a time.
 
+## Plain kubectl on your Mac
+
+After successful setup, startup selects `cks-lab` if your previous context was empty or already `cks-lab`. This restores the selection after a fresh attempt recreates the cluster. An unrelated selected cluster is preserved; the simulator wrapper always targets the lab.
+
+To select the existing lab for plain Mac commands without restarting:
+
+```bash
+kubectl config use-context cks-lab
+kubectl get nodes
+```
+
+If plain kubectl tries `http://localhost:8080`, it is not using the lab endpoint. Select the lab as above or use `./k8s-sim.sh kubectl get nodes`. This context selection does not reset the exam or timer.
+
 ## Use Vim
 
 The simulator uses **Vim** as its preferred editor. `kubectl edit` through the wrapper opens Vim on your Mac:
@@ -98,6 +111,14 @@ Grade your work:
 ./k8s-sim.sh score
 ```
 
+Check one answer at a time, for example question 1:
+
+```bash
+./k8s-sim.sh score --task 1
+```
+
+Scoring rereads the saved node files each time. Tasks 1, 6, 15 and 16 show `PASS CONFIG`/`FAIL CONFIG` with individual PASS/FAIL requirements; invalid YAML, duplicate keys/flags and unreadable evidence show `ERROR`. All required checks must pass to earn that task's points. These checks do not activate copied configuration or test live component enforcement. A YAML parser is bundled, so no package installation is needed. Updating the grader preserves your current answers and timer; no new exam is required.
+
 The timer displays `EXPIRED` when time runs out. Expiry is advisory: your work remains available and you can still score it.
 
 ## Finish and clean up
@@ -120,7 +141,7 @@ The mock shares the parent simulator's guarded runtime, `cks-lab` profile and `.
 
 Run the task and solution commands from `secon_version`. **For Mac commands such as `vim`, use `../.cks-state/jumpbox/exam/`; shared certificates are in `../.cks-state/jumpbox/`.** The launcher resolves file arguments passed to its kubectl wrapper from the parent `CKS-LAB` directory, so wrapper arguments such as `--cert=.cks-state/jumpbox/tls.crt` omit `../`. Commands in the solution guide use the appropriate path for each case. Node paths such as `/opt/cks-lab/exam` are inside the node and stay the same.
 
-The automatic score ceiling remains 47/100; 53 points require manual/external evidence. Scenario revision 2 starts the assigned local controls in explicitly incorrect states and audits those faults before the timer begins. See [the starting-state contract](EXAM-NOTES.md#starting-state-contract). Updating the files preserves your current attempt; run `start` when ready to archive it and begin the revised scenarios.
+The automatic score ceiling is 72/100: 47 workload/replay points plus 25 configuration-copy points. The remaining 28 require manual/external evidence. Scenario revision 2 starts the assigned local controls in explicitly incorrect states and audits those faults before the timer begins. See [the starting-state contract](EXAM-NOTES.md#starting-state-contract). Updating the files preserves your current attempt; run `start` when ready to archive it and begin the revised scenarios.
 
 Run the mock-specific offline tests from this folder:
 

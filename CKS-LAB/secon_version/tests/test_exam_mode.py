@@ -34,6 +34,7 @@ class ExamGradingTests(unittest.TestCase):
         self.assertEqual(len(exam.TITLES), 16)
         self.assertEqual(sum(exam.WEIGHTS), 100)
         self.assertEqual(sum(exam.WEIGHTS[q - 1] for q in exam.LIVE) + 3, 47)
+        self.assertEqual(sum(exam.WEIGHTS[q - 1] for q in exam.CONFIG_TASKS), 25)
 
     def test_hardening_rejects_init_container_escape(self):
         s = spec(); self.assertTrue(exam.secure_containers(s, 30000))
@@ -134,10 +135,10 @@ class ExamGradingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(exam, 'STATE', Path(tmp)):
             state = Path(tmp); (state / 'setup-complete').touch(); (state / 'exam-expected.json').write_text('{}')
             output = io.StringIO()
-            with patch.object(exam, 'check_owner'), patch.object(exam, 'check_tls', return_value=True), patch.object(exam, 'check_hardened', return_value=True), patch.object(exam, 'check_build', return_value=True), patch.object(exam, 'check_runtime', return_value=True), patch.object(exam, 'check_network', return_value=True), patch.object(exam, 'check_token', return_value=True), patch.object(exam, 'check_supply', return_value=True), patch.object(exam.core, 'get', return_value={'spec': {'template': {'spec': {}}}, 'metadata': {'labels': {'pod-security.kubernetes.io/enforce': 'restricted'}}}), patch.object(Path, 'read_text', return_value='{}'), redirect_stdout(output):
+            with patch.object(exam, 'check_owner'), patch.object(exam.ConfigGrader, 'grade', return_value=type('Result', (), {'passed': True, 'checks': [('Required configuration', True)]})()), patch.object(exam, 'check_tls', return_value=True), patch.object(exam, 'check_hardened', return_value=True), patch.object(exam, 'check_build', return_value=True), patch.object(exam, 'check_runtime', return_value=True), patch.object(exam, 'check_network', return_value=True), patch.object(exam, 'check_token', return_value=True), patch.object(exam, 'check_supply', return_value=True), patch.object(exam.core, 'get', return_value={'spec': {'template': {'spec': {}}}, 'metadata': {'labels': {'pod-security.kubernetes.io/enforce': 'restricted'}}}), patch.object(Path, 'read_text', return_value='{}'), redirect_stdout(output):
                 self.assertEqual(exam.score_exam(), 0)
-            self.assertIn('47/100', output.getvalue())
-            self.assertEqual(output.getvalue().count('MANUAL'), 8)
+            self.assertIn('72/100', output.getvalue())
+            self.assertEqual(output.getvalue().count('MANUAL'), 4)
 
     def test_setup_has_intentionally_broken_workloads_and_working_network_baseline(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,8 +167,9 @@ class ExamLifecycleTests(unittest.TestCase):
     def test_exam_start_requests_two_nodes_and_no_timer_on_failed_baseline(self):
         import shutil
         (self.root / 'secon_version').mkdir()
-        for name in ('exam_mode.py', 'scenario_fixtures.py'):
+        for name in ('exam_mode.py', 'scenario_fixtures.py', 'config_grading.py'):
             shutil.copy2(ROOT / 'secon_version' / name, self.root / 'secon_version' / name)
+        shutil.copytree(ROOT / 'secon_version/vendor', self.root / 'secon_version/vendor')
         result = self.run_lab('start', '--exam')
         self.assertNotEqual(result.returncode, 0)  # Fake cluster has no Ready probe endpoints.
         self.assertIn('--nodes=2', self.log.read_text())

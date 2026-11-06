@@ -36,15 +36,15 @@ A fresh revision-2 exam must begin with the following faults. Startup reads back
 
 The setup records the successful local starting checks in the existing private `exam-expected.json` session metadata. It does not overwrite an in-progress attempt when you update the scripts. Use `start` when you are ready for a new attempt. Old attempts retain their original starting state.
 
-External tasks 8, 10, 13 and 14 still require their documented controller/host/cluster prerequisites. This revision does not pretend those systems are supplied. Their runtime verification and the component-copy exercises remain manual/external.
+External tasks 8, 10, 13 and 14 still require their documented controller/host/cluster prerequisites. This revision does not pretend those systems are supplied. Their runtime verification remains manual/external. Component-copy exercises now receive automatic configuration checks, with live enforcement still outside this lab.
 
 ## What can be graded locally
 
-The automatic ceiling is **47/100**: 44 points from tasks 2, 3, 5, 7, 9, 11 and 12, plus 3 points from task 4. The remaining **53 points** require manual/external evidence. Scores are not normalized to 100 and do not predict an exam pass.
+The automatic ceiling is **72/100**: 44 points from tasks 2, 3, 5, 7, 9, 11 and 12, plus 3 replay/containment points from task 4 and 25 configuration-copy points from tasks 1, 6, 15 and 16. The remaining **28 points** require manual/external evidence. Scores are not normalized to 100 and do not predict an exam pass.
 
 | Tasks | Local evidence | Additional verification |
 | --- | --- | --- |
-| 1, 6, 15, 16 | Configuration copies for manual review | Apply appropriate real configuration on a separate disposable Linux control plane, verify syntax, component/API health and the intended behavior. |
+| 1, 6, 15, 16 | Parsed YAML, required settings, flags, mounts and preserved component prerequisites; automatic CONFIG checks | Apply appropriate real configuration on a separate disposable Linux control plane, verify syntax, component/API health and the intended behavior. |
 | 2 | Original certificate, valid TLS Secret, preserved mount and healthy Deployment | Inspect events and mounted material as needed. |
 | 3, 5 | Security configuration, available replicas, effective UID and actual read-only root mount; task 3 also checks final-stage Dockerfile user | Build/run task 3's image separately to validate its image user. Editing the Dockerfile does not rebuild the Deployment image. |
 | 4 | Replayed events, identified workload and actual containment: up to 3 points | A real Falco engine must validate the rule and alert behavior for the remaining 4 points. Setup never opens `/dev/mem`. |
@@ -56,6 +56,14 @@ The automatic ceiling is **47/100**: 44 points from tasks 2, 3, 5, 7, 9, 11 and 
 | 12 | Restricted namespace label, compliant security settings and healthy Pods | Diagnose admission failures without weakening namespace enforcement. |
 | 13 | No Docker daemon/socket exercise is provisioned on the containerd nodes | Use a separate disposable Linux Docker host with a designated user; verify effective sessions and socket access. |
 | 14 | No Cilium/SPIRE environment is provisioned | Use a dedicated Cilium/SPIRE lab; verify application identity and local host access. Mutual authentication does not itself encrypt payloads. |
+
+## Checking saved answers
+
+`./k8s-sim.sh score` checks all supported tasks. `./k8s-sim.sh score --task 1` checks only question 1; substitute any task number from 1 to 16. Each command rereads the current files and objects without resetting the session or changing a component.
+
+For component copies, `PASS CONFIG` means all task requirements and preserved component prerequisites passed static checks. `FAIL CONFIG` lists the requirements still unmet. Every requirement must pass before configuration points are awarded; there is no credit merely for inherited correct defaults. `ERROR` means the evidence could not be read or parsed, and receives no credit. Malformed YAML, duplicate keys, conflicting command flags, wrong CA paths, missing mounts and explicitly disabled required plugins do not pass.
+
+The grader uses a bundled pinned PyYAML SafeLoader with duplicate-key rejection, so flow-style YAML and normal formatting variations are supported without installing anything on the Mac. Validation covers the specified settings and component prerequisites; it is not a full Kubernetes schema check, nor proof that an edited copy was activated. Test real authentication, log rotation and webhook behavior separately on disposable infrastructure. Tasks 8, 10, 13 and 14 remain manual/external, as do the four Falco-engine points in task 4.
 
 ## Technical notes for review
 

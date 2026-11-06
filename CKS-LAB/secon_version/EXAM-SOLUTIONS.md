@@ -52,7 +52,7 @@ Tasks 1, 6, 15 and 16 edit **copies only**. Never copy these files into `/etc/ku
 
 ## Task 01 | Component authentication
 
-**Where:** inside `cks-lab`. **Result:** corrected kubelet and etcd configuration copies. This task is reviewed manually.
+**Where:** inside `cks-lab`. **Result:** corrected kubelet and etcd configuration copies. This task receives automatic CONFIG checks; run `./k8s-sim.sh score --task 1` from your Mac after saving.
 
 ### 1. Open the kubelet copy
 
@@ -324,7 +324,7 @@ k get deployment immutable-app -n exam-immutable
 
 ## Task 06 | Configure API auditing
 
-**Where:** inside `cks-lab`. **Result:** an all-request Metadata policy plus flags and mounts in the copied API server manifest. Manual review only.
+**Where:** inside `cks-lab`. **Result:** an all-request Metadata policy plus flags and mounts in the copied API server manifest. Automatic CONFIG checks; live enforcement is not tested.
 
 ### 1. Connect and write the policy
 
@@ -1001,7 +1001,7 @@ Use the source/destination identities and handshake evidence to confirm mutual a
 
 ## Task 15 | Make image admission fail closed
 
-**Where:** inside `cks-lab`. **Result:** fail-closed image webhook configuration and matching API server flag/mounts in the copy. Manual review only.
+**Where:** inside `cks-lab`. **Result:** fail-closed image webhook configuration and matching API server flag/mounts in the copy. Automatic CONFIG checks; live enforcement is not tested.
 
 ### 1. Edit the admission configuration
 
@@ -1083,7 +1083,7 @@ exit
 
 ## Task 16 | Harden API server access
 
-**Where:** inside `cks-lab`. **Result:** corrected authentication, authorization and admission flags in the existing API server copy. Manual review only.
+**Where:** inside `cks-lab`. **Result:** corrected authentication, authorization and admission flags in the existing API server copy. Automatic CONFIG checks; live enforcement is not tested.
 
 ### 1. Open the same API server copy
 
@@ -1134,9 +1134,10 @@ Back on your **Mac in `secon_version`**:
 
 ```bash
 ./k8s-sim.sh score
+./k8s-sim.sh score --task 1
 ./k8s-sim.sh time
 ```
 
-The automatic ceiling is **47/100**. `MANUAL` means the simulator cannot award that task's points automatically; a correct file-only or external solution does not turn into an automatic pass. `ERROR` means evidence could not be read, not that the task was necessarily solved incorrectly. See [EXAM-NOTES.md](EXAM-NOTES.md) for the full breakdown.
+The automatic ceiling is **72/100**. Tasks 1, 6, 15 and 16 receive `PASS CONFIG` or `FAIL CONFIG`, followed by individual requirements. They earn their task weight only when every check passes. `MANUAL` means the remaining task requires external evidence that this simulator cannot verify automatically. `ERROR` means evidence could not be read, not that the task was necessarily solved incorrectly. See [EXAM-NOTES.md](EXAM-NOTES.md) for the full breakdown.
 
 Use this guide to review individual tasks without restarting. Run `./k8s-sim.sh start` only when you want to archive the current attempt and create a fresh exam.

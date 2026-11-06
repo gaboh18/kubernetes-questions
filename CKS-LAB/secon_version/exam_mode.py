@@ -11,6 +11,7 @@ import sys
 # Shared runtime stays in the original simulator directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import score as core
+from config_grading import ConfigGrader, ConfigurationError, CONFIG_TASKS
 from scenario_fixtures import component_fixtures, insecure_container, verify_component_faults, verify_workload_faults
 
 ROOT, STATE = core.ROOT, core.STATE
@@ -351,11 +352,11 @@ def check_hardened(name, ns, uid=None, restricted=False):
     return True
 
 
-def score_exam():
+def score_exam(task=None):
     check_owner()
     if not (STATE / 'setup-complete').exists():
         raise core.EvidenceError('setup incomplete')
-    expected = json.loads((STATE / 'exam-expected.json').read_text())
+    expected = json.loads((STATE / 'exam-expected.json').read_text()) if task in (None, 4, 11) else {}
     checks = {
         2: check_tls,
         3: lambda: check_hardened('build-app', 'exam-build', 65535) and check_build((FILES / 'Dockerfile').read_text(), core.get('deployment', 'build-app', 'exam-build')['spec']['template']['spec']),
@@ -366,20 +367,44 @@ def score_exam():
         11: lambda: check_supply(expected),
         12: lambda: core.get('namespace', 'exam-restricted').get('metadata', {}).get('labels', {}).get('pod-security.kubernetes.io/enforce') == 'restricted' and check_hardened('locked-app', 'exam-restricted', restricted=True),
     }
+    config_grader = ConfigGrader(lambda path: core.command(core.PREFIX + ['ssh', '--', 'sudo cat ' + shlex.quote(path)]))
     earned = errors = 0
     for q, (title, weight) in enumerate(zip(TITLES, WEIGHTS), 1):
-        available = 3 if q == 4 else weight if q in LIVE else 0
+        if task is not None and q != task:
+            continue
+        available = 3 if q == 4 else weight if q in LIVE or q in CONFIG_TASKS else 0
         status = 'MANUAL'
+        task_earned = 0
+        details = []
+        if q in CONFIG_TASKS:
+            try:
+                result = config_grader.grade(q)
+                status = 'PASS CONFIG' if result.passed else 'FAIL CONFIG'
+                task_earned = available if result.passed else 0
+                details = [('PASS' if passed else 'FAIL', label) for label, passed in result.checks]
+            except ConfigurationError as error:
+                status = 'ERROR (no credit)'; errors += 1
+                details = [('ERROR', str(error))]
+            except (core.EvidenceError, OSError, ValueError, TypeError, KeyError, AttributeError):
+                status = 'ERROR (no credit)'; errors += 1
+                details = [('ERROR', 'Cannot read or validate configuration; check YAML syntax, duplicate keys/flags and the required files.')]
         if q in checks:
             try:
                 passed = checks[q]()
                 status = ('REPLAY PARTIAL' if q == 4 else 'PASS') if passed else 'FAIL'
-                earned += available if passed else 0
+                task_earned = available if passed else 0
             except (core.EvidenceError, OSError, ValueError, TypeError, KeyError, AttributeError):
                 status = 'ERROR (no credit)'; errors += 1
-        print(f'{q:02}. {status:20} {title} [auto {available}, manual {weight - available}]')
-    print(f'Mock evidence points: {earned}/100; automatic ceiling 47/100 (44 live + 3 replay).')
-    print('53 points require external/manual evidence. No exam pass prediction. Run time for your deadline.')
+        earned += task_earned
+        print(f'{q:02}. {status:20} {title} [earned {task_earned}/{weight}; auto {available}, manual {weight - available}]')
+        for outcome, label in details:
+            print(f'    {outcome:5} {label}')
+    if task is None:
+        print(f'Mock evidence points: {earned}/100; automatic ceiling 72/100 (44 live + 3 replay + 25 configuration).')
+    else:
+        print(f'Task {task:02} practice points: {earned}/{WEIGHTS[task - 1]}.')
+    print('CONFIG checks validate saved copies; they do not verify live component behavior.')
+    print('28 points require external/manual evidence. No exam pass prediction. Run time for your deadline.')
     return 1 if errors else 0
 
 
@@ -389,7 +414,11 @@ def main():
             setup(); return 0
         if sys.argv[1:] == ['score']:
             return score_exam()
-        raise ValueError('Use setup or score via k8s-sim.sh')
+        if len(sys.argv) == 4 and sys.argv[1:3] == ['score', '--task']:
+            task = int(sys.argv[3])
+            if 1 <= task <= len(WEIGHTS):
+                return score_exam(task)
+        raise ValueError('Use score [--task NUMBER] (1-16), or setup, via k8s-sim.sh')
     except (core.EvidenceError, OSError, ValueError, KeyError) as e:
         print(f'Mock unavailable: {e}', file=sys.stderr); return 1
 
