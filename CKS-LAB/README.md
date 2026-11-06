@@ -14,13 +14,19 @@ The second 16-task mock is in [secon_version/](secon_version/README.md), includi
 ./secon_version/k8s-sim.sh score
 ```
 
-Read [EXAM.md](secon_version/EXAM.md) for tasks and fidelity limits, [EXAM-SOLUTIONS.md](secon_version/EXAM-SOLUTIONS.md) after your attempt, and [EXAM-SOURCES.md](secon_version/EXAM-SOURCES.md) for corrections to the report. This mode creates **two** lab nodes, real broken workloads, namespace traffic probes, randomized SBOM/incident targets, and a separate weighted rubric. Use `./k8s-sim.sh ssh --node cks-lab-m02` to practise reaching the worker. It requires enough Docker resources for both nodes alongside any existing clusters.
+Read [EXAM.md](secon_version/EXAM.md) for tasks and fidelity limits, [EXAM-SOLUTIONS.md](secon_version/EXAM-SOLUTIONS.md) after your attempt, and [EXAM-SOURCES.md](secon_version/EXAM-SOURCES.md) for corrections to the report. This mode creates **two** lab nodes, real broken workloads, namespace traffic probes, randomized SBOM/incident targets, and a separate weighted rubric. Scenario revision 2 deliberately breaks every assigned local hardening field and audits the starting faults before the timer begins; see [the starting-state contract](secon_version/EXAM-NOTES.md#starting-state-contract). Use `./k8s-sim.sh ssh --node cks-lab-m02` to practise reaching the worker. It requires enough Docker resources for both nodes alongside any existing clusters.
 
-The automatic ceiling in exam mode is **47/100**: 44 points for live workload checks and 3 for incident replay plus containment. The other 53 require external/manual evidence; no perfect normalized score hides missing infrastructure. The original 22-task practice bank and its 55-point configuration score remain available through plain `start`. Modes require a fresh owned profile; starting never replaces an existing cluster or saved answers.
+The automatic ceiling in exam mode is **72/100**: 44 points for live workload checks, 3 for incident replay plus containment and 25 for configuration-copy checks. The other 28 require external/manual evidence; no perfect normalized score hides missing infrastructure. The original 22-task practice bank and its 55-point configuration score remain available through plain `start`. Each `start` archives the previous attempt and replaces the owned lab profile automatically. Other profiles are preserved.
+
+## Update between Macs using Git
+
+The whole simulator is versioned here: parent launchers and archive/editor/client helpers, plus `secon_version` scenarios, grader and bundled parser. Commit shared-runtime changes together with any mock changes, then push from the source Mac. Pushing alone does not include uncommitted or untracked files.
+
+On the other Mac, run `git pull --ff-only` from the repository and use the updated scripts normally. No downloaded installer is required. Existing `.cks-state` answers, credentials, archives and timer remain local and are ignored by Git. A grader update takes effect on the next `score` command without restarting the exam; scenario setup changes apply to the next fresh `start`.
 
 ## Start and work
 
-Prerequisites: a running Docker daemon, an installed compatible kubectl client, Minikube with support for your selected Kubernetes version, Python 3, and OpenSSL with `req -addext` support. The first start downloads cluster/CNI/workload images and needs internet access. No host packages or scanning tools are installed automatically.
+Prerequisites: a running Docker daemon, an installed compatible kubectl client, Minikube with support for your selected Kubernetes version, Python 3, Vim, and OpenSSL with `req -addext` support. The first start downloads cluster/CNI/workload images and needs internet access. No host packages or scanning tools are installed automatically. Setup ensures Vim is installed inside the owned lab nodes and configures it as their default editor before the timer starts. Lab wrapper commands also set EDITOR, VISUAL and KUBE_EDITOR to vim.
 
 ```bash
 ./k8s-sim.sh start
@@ -30,11 +36,11 @@ Prerequisites: a running Docker daemon, an installed compatible kubectl client, 
 ./k8s-sim.sh score
 ```
 
-The commands above use the original drill mode. Run these from this directory, or invoke the script by its full path. Use the `kubectl` wrapper for all exercise commands: it always targets **cks-lab**, regardless of your current context. Use `./k8s-sim.sh ssh 'command'` for node commands. An interactive SSH session already runs inside the lab node.
+The commands above use the original drill mode. Run these from this directory, or invoke the script by its full path. Use the `kubectl` wrapper for all exercise commands: it always targets **cks-lab**, regardless of your current context. Use `./k8s-sim.sh ssh 'command'` for node commands. An interactive SSH session already runs inside the lab node. Inside either node, use kubectl directly; setup provides the bundled client and a private kubeconfig for the SSH user and root.
 
-For a different supported version, use `CKS_KUBERNETES_VERSION=v1.35.1 ./k8s-sim.sh start`. The default is v1.35.0. Minikube uses a dedicated Docker profile, containerd, and Calico; your existing context is retained. Successful startup waits for nodes and baseline workloads, then starts the two-hour wall-clock timer. Expiry is advisory: it does not destroy work or stop scoring.
+For a different supported version, use `CKS_KUBERNETES_VERSION=v1.35.1 ./k8s-sim.sh start`. The default is v1.35.0. Minikube uses a dedicated Docker profile, containerd, and Calico; an unrelated selected context is retained. If no context was selected, or the previous selection was `cks-lab`, successful setup selects `cks-lab` so plain `kubectl` works after each fresh attempt. Successful startup waits for nodes and baseline workloads, then starts the two-hour wall-clock timer. Expiry is advisory: it does not destroy work or stop scoring.
 
-Start refuses to reuse an existing `cks-lab` profile. Scripts record the cluster's `kube-system` namespace UID and require a match before setup, scoring, wrapper commands, or cleanup. These checks prevent accidental targeting; they are not protection against a malicious user who can edit local state.
+Start verifies ownership of an existing `cks-lab` profile, saves its local/session/node work and Kubernetes resource snapshot, then removes it before creating a fresh attempt. Scripts record the cluster's `kube-system` namespace UID and require a match before setup, scoring, wrapper commands, or cleanup. An unowned profile is never replaced. These checks prevent accidental targeting; they are not protection against a malicious user who can edit local state.
 
 ## Files and advanced exercises
 
@@ -68,7 +74,9 @@ Tests are offline and use a fake Minikube executable. They cover isolation/refus
 ./k8s-sim.sh cleanup
 ```
 
-Cleanup deletes **only the owned cks-lab profile**, then clears its UID/timer/setup marker. Local answers and reports are retained. Move `.cks-state/jumpbox` to an archive directory before another `start`; existing answers are never overwritten. The state directory gets a local ignore file so keys and generated answers are not accidentally committed.
+For another attempt, run `start` again. It automatically verifies and saves local answers, session metadata, Kubernetes resource snapshots and available node files in `.cks-state/archives/<timestamp>_<unique-id>/`, removes the previous owned profile, then creates the new exam. Manual `cleanup` remains available when you want to remove the lab immediately; it retains local answers for the next automatic archive. Backups are retained indefinitely, and startup prints their location. The state directory gets a local ignore file so keys and generated answers are not accidentally committed.
+
+If the initial backup or ownership checks fail, the previous lab is retained. If answers change after the backup, those local files are retained and the new start stops. Archives include lab Secrets and are stored in private directories. If deletion fails, original local answers and timer metadata are retained. A stopped/unreachable API must be restored before ownership can be verified; startup does not bypass that guard.
 
 If startup fails before it can record a cluster UID, inspect `minikube profile list` and the failure message. The scripts deliberately refuse to adopt that profile. After verifying that `cks-lab` is the newly created disposable profile, remove that profile manually with `minikube -p cks-lab delete`. If cleanup cannot reach the API to verify ownership, restore access or inspect the profile manually; no automatic bypass is provided. A leftover `.cks-state/lock` after a forced interruption must be inspected and removed only when no lab operation is active.
 

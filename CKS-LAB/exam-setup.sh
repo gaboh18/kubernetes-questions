@@ -3,6 +3,8 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lab-common.sh"
 require_lab
+bash "$LAB_DIR/editor-setup.sh"
+bash "$LAB_DIR/node-client-setup.sh"
 [ ! -e "$STATE_DIR/setup-complete" ] || die "Setup is already complete. Use cleanup then start for a fresh attempt."
 need openssl
 mkdir -p "$JUMPBOX_DIR"

@@ -1,2 +1,9 @@
 .remaining_time
 .timer_pid
+
+# Per-machine attempts, credentials, caches and source-update backups
+.cks-state/
+__pycache__/
+*.py[cod]
+.cks-runtime-backups/
+.cks-runtime-update-lock/

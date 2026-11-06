@@ -10,6 +10,12 @@ This folder contains the 16-task, two-hour mock, its solutions and supporting fi
 - `examples/`: supporting policy example.
 - `tests/`: mock-specific regression tests.
 
+## Update between Macs
+
+Use the repository's normal commit/push/pull workflow. Include changes in the parent `CKS-LAB` runtime as well as this folder; both are required. Run `git pull --ff-only` on the other Mac after pushing the committed changes. No separate installer is needed. See [the shared update instructions](../README.md#update-between-macs-using-git).
+
+Git leaves each Mac's ignored `.cks-state` directory intact. Run `./k8s-sim.sh score --task 1` to check an existing answer after pulling a grader update. Do not run `start` merely to load an update: it archives the current attempt and creates a new one.
+
 ## Start the mock
 
 1. Open **Docker Desktop** and wait for its engine to be running. The simulator creates and configures its own two-node Minikube cluster; you do not need to start a Minikube container manually. Prerequisites are Minikube, a compatible kubectl client, Python 3 and OpenSSL, as described in the parent README.

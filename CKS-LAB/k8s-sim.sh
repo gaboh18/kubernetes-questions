@@ -2,9 +2,8 @@
 set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/lab-common.sh"
 start_exam() {
-    need minikube; need kubectl; need python3; need openssl
-    lock_lab
-    local profiles version mode nodes
+    need minikube; need kubectl; need python3; need openssl; need vim
+    local profiles version mode nodes profile_status archive_dir previous_context
     [ "$#" -le 1 ] || die "Use start or start --exam."
     mode=drills; nodes=1
     case "${1:-}" in
@@ -12,24 +11,38 @@ start_exam() {
         "") ;;
         *) die "Use start or start --exam." ;;
     esac
-    if [ -d "$JUMPBOX_DIR" ] && [ -n "$(ls -A "$JUMPBOX_DIR")" ]; then
-        die "Saved jumpbox answers exist. Move .cks-state/jumpbox aside before a fresh attempt."
-    fi
+    version=${CKS_KUBERNETES_VERSION:-v1.35.0}
+    [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use a version such as v1.35.0."
+    lock_lab
     profiles=$(minikube profile list -o json 2>/dev/null) || true
-    printf '%s' "$profiles" | python3 -c '
+    profile_status=$(printf '%s' "$profiles" | python3 -c '
 import json, sys
 try:
     p = json.load(sys.stdin)
     if not isinstance(p, dict) or not all(k in p and isinstance(p[k], list) for k in ("valid", "invalid")):
         raise ValueError("invalid profile list")
     entries = p["valid"] + p["invalid"]
-    if any(e.get("Name") == "cks-lab" for e in entries):
-        sys.exit("Profile cks-lab already exists. Use cleanup for an owned session; existing profiles are never adopted.")
+    if not all(isinstance(e, dict) and isinstance(e.get("Name"), str) for e in entries):
+        raise ValueError("invalid profile entry")
+    print("present" if any(e["Name"] == "cks-lab" for e in entries) else "absent")
 except (ValueError, TypeError, AttributeError):
     sys.exit("Cannot inspect Minikube profiles; refusing to start.")
-'
-    version=${CKS_KUBERNETES_VERSION:-v1.35.0}
-    [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Use a version such as v1.35.0."
+')
+    if [ "$profile_status" = present ]; then
+        require_lab
+        previous_context=$(kubectl config current-context 2>/dev/null || true)
+        archive_dir=$(python3 "$LAB_DIR/attempt_archive.py" prepare --node)
+        echo "Previous attempt saved to: $archive_dir"
+        delete_owned_lab
+    else
+        previous_context=$(kubectl config current-context 2>/dev/null || true)
+        archive_dir=$(python3 "$LAB_DIR/attempt_archive.py" prepare)
+        if [ -n "$archive_dir" ]; then
+            echo "Previous attempt saved to: $archive_dir"
+        fi
+    fi
+    python3 "$LAB_DIR/attempt_archive.py" finish "$archive_dir"
+    clear_session_state
     printf "%s\n" "$mode" > "$STATE_DIR/mode"
     echo "Creating dedicated profile $PROFILE ($version, Calico)."
     if [ "$mode" = exam ]; then
@@ -41,6 +54,11 @@ except (ValueError, TypeError, AttributeError):
     [ -s "$STATE_DIR/cluster-uid" ] || die "Could not record cluster ownership."
     k wait --for=condition=Ready nodes --all --timeout=180s
     bash "$LAB_DIR/exam-setup.sh"
+    # Recreating Minikube can remove its active context. Keep unrelated choices,
+    # but make plain kubectl work on a new Mac or a continued lab workflow.
+    case "$previous_context" in
+        ""|"$PROFILE") kubectl config use-context "$PROFILE" >/dev/null ;;
+    esac
     python3 - "$STATE_DIR/deadline" <<'PY'
 import pathlib, sys, time
 pathlib.Path(sys.argv[1]).write_text(str(int(time.time()) + 7200))
@@ -51,10 +69,12 @@ PY
 case "${1:-}" in
     start) shift; start_exam "$@" ;;
     score)
+        shift
         require_lab; need python3
         if [ "$(cat "$STATE_DIR/mode" 2>/dev/null || true)" = exam ]; then
-            python3 "$LAB_DIR/secon_version/exam_mode.py" score
+            python3 "$LAB_DIR/secon_version/exam_mode.py" score "$@"
         else
+            [ "$#" -eq 0 ] || die "Task selection is available in the second mock: score --task NUMBER."
             python3 "$LAB_DIR/score.py"
         fi
         ;;

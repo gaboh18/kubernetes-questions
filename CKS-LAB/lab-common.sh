@@ -5,6 +5,8 @@ LAB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROFILE=cks-lab
 STATE_DIR="$LAB_DIR/.cks-state"
 JUMPBOX_DIR="$STATE_DIR/jumpbox"
+# Vim is the preferred editor for lab commands, including kubectl edit.
+export EDITOR=vim VISUAL=vim KUBE_EDITOR=vim
 die() { echo "Error: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || die "Install $1 before using the simulator."; }
 k() {
@@ -45,4 +47,14 @@ require_lab() {
     local actual_uid
     actual_uid=$(k get ns kube-system -o jsonpath='{.metadata.uid}' --request-timeout=15s) || die "Lab API unavailable; no changes made."
     [ -n "$actual_uid" ] && [ "$actual_uid" = "$(cat "$STATE_DIR/cluster-uid")" ] || die "Profile ownership mismatch; refusing to use this cluster."
+}
+
+clear_session_state() {
+    rm -f -- "$STATE_DIR/cluster-uid" "$STATE_DIR/deadline" "$STATE_DIR/setup-complete" "$STATE_DIR/mode" "$STATE_DIR/exam-expected.json"
+}
+delete_owned_lab() {
+    require_lab
+    echo "Removing the previous owned Minikube profile $PROFILE..."
+    minikube -p "$PROFILE" delete
+    clear_session_state
 }
