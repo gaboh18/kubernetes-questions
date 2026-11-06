@@ -139,6 +139,11 @@ if args[2:5] == ['kubectl', '--', 'get']:
     print(json.dumps({'kind': 'List', 'items': []}) if ',' in args[5] else '{}'); sys.exit(0)
 if args[2] == 'delete' and os.environ.get('FAIL_DELETE') == '1':
     sys.exit(1)
+if args[2] == 'ssh' and 'CKS_IDENTITY_RECOVERY' in args[-1]:
+    if os.environ.get('NODE_MARKER') != 'cks-lab-fixtures-v1' or os.environ.get('FAIL_NODE_IDENTITY') == '1':
+        sys.exit(1)
+    assert '--kubeconfig=/etc/kubernetes/admin.conf' in args[-1]
+    print(os.environ.get('NODE_UID', 'owned'),end='');sys.exit(0)
 if args[2] == 'ssh' and 'tar -C /opt' in args[-1]:
     if os.environ.get('FAIL_NODE_ARCHIVE') == '1': sys.exit(1)
     import base64, io, tarfile
@@ -193,8 +198,78 @@ sys.exit(0)
     def test_existing_profile_start_refused(self):
         self.env['PROFILES'] = '{"valid":[{"Name":"cks-lab"}],"invalid":[]}'
         self.assertNotEqual(self.run_lab('start').returncode, 0)
-        self.assertEqual(self.log.read_text().splitlines(), ['profile list -o json'])
+        self.assertNotIn('-p cks-lab delete', self.log.read_text())
+        self.assertNotIn('-p cks-lab start', self.log.read_text())
+        self.assertFalse((self.state / 'cluster-uid').exists())
 
+
+    def test_start_recovers_missing_identity_then_archives_and_replaces_verified_lab(self):
+        jump = self.previous_attempt()
+        (self.state / 'cluster-uid').unlink()
+        self.env['NODE_MARKER'] = 'cks-lab-fixtures-v1'
+        result = self.run_lab('start')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Recovered missing session identity', result.stdout)
+        calls = self.log.read_text()
+        self.assertLess(calls.index('CKS_IDENTITY_RECOVERY'), calls.index('tar -C /opt'))
+        self.assertLess(calls.index('tar -C /opt'), calls.index('-p cks-lab delete'))
+        backup = next((self.state / 'archives').iterdir())
+        self.assertEqual((backup / 'jumpbox/answer').read_text(), 'keep')
+        self.assertEqual((backup / 'deadline').read_text(), '1')
+        self.assertEqual((self.state / 'cluster-uid').read_text().strip(), 'owned')
+        self.assertTrue((jump / 'Dockerfile').exists())
+
+    def test_empty_identity_can_be_recovered_from_verified_node(self):
+        self.previous_attempt()
+        (self.state / 'cluster-uid').write_text('')
+        self.env['NODE_MARKER'] = 'cks-lab-fixtures-v1'
+        result = self.run_lab('start')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Recovered missing session identity', result.stdout)
+
+    def test_recovery_rejects_host_context_pointing_at_another_cluster(self):
+        jump = self.previous_attempt()
+        (self.state / 'cluster-uid').unlink()
+        self.env.update(NODE_MARKER='cks-lab-fixtures-v1', NODE_UID='another-cluster')
+        result = self.run_lab('start')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Host context does not match', result.stderr)
+        self.assertEqual((jump / 'answer').read_text(), 'keep')
+        self.assertFalse((self.state / 'cluster-uid').exists())
+        self.assertNotIn('-p cks-lab delete', self.log.read_text())
+
+    def test_recovery_without_marker_or_reachable_node_preserves_everything(self):
+        jump = self.previous_attempt()
+        (self.state / 'cluster-uid').unlink()
+        for marker, unreachable in (('', '0'), ('not-this-lab', '0'), ('cks-lab-fixtures-v1', '1')):
+            with self.subTest(marker=marker, unreachable=unreachable):
+                self.env.update(NODE_MARKER=marker, FAIL_NODE_IDENTITY=unreachable)
+                self.log.unlink(missing_ok=True)
+                result = self.run_lab('start')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual((jump / 'answer').read_text(), 'keep')
+                self.assertEqual((self.state / 'deadline').read_text(), '1')
+                self.assertFalse((self.state / 'cluster-uid').exists())
+                self.assertNotIn('-p cks-lab delete', self.log.read_text())
+
+    def test_recovered_identity_does_not_bypass_backup_failure(self):
+        jump = self.previous_attempt()
+        (self.state / 'cluster-uid').unlink()
+        self.env.update(NODE_MARKER='cks-lab-fixtures-v1', FAIL_NODE_ARCHIVE='1')
+        result = self.run_lab('start')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((jump / 'answer').read_text(), 'keep')
+        self.assertEqual((self.state / 'deadline').read_text(), '1')
+        self.assertNotIn('-p cks-lab delete', self.log.read_text())
+
+    def test_invalid_recovered_uid_is_not_saved(self):
+        self.env.update(PROFILES='{"valid":[{"Name":"cks-lab"}],"invalid":[]}',
+                        NODE_MARKER='cks-lab-fixtures-v1', NODE_UID='not/a/uid', ACTUAL_UID='not/a/uid')
+        result = self.run_lab('start')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.state / 'cluster-uid').exists())
+        self.assertFalse(list(self.state.glob('.cluster-uid-*')))
+        self.assertNotIn('-p cks-lab delete', self.log.read_text())
 
     def test_node_clients_use_internal_api_and_owned_nodes(self):
         (self.state / 'cluster-uid').write_text('owned')

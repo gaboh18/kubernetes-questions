@@ -158,3 +158,9 @@ python3 -B -m unittest discover -s tests -v
 ## Backup troubleshooting
 
 If a backup fails, startup keeps the existing lab. The error gives the archive directory; inspect `node-backup.log` there for SSH diagnostics. After correcting the problem, run `./k8s-sim.sh start` again. The backup transfer handles Minikube's terminal-based SSH connection automatically.
+
+## Missing local session record
+
+If a simulator node still exists after the local ownership file is lost, `start` can recover automatically. It verifies the node's `cks-lab-fixtures-v1` marker, independently reads the cluster identity using the node's admin kubeconfig and matches it against the host connection. It then restores `../.cks-state/cluster-uid`, archives the previous attempt and starts a fresh exam normally.
+
+Recovery does not invent a timer or resume lost session metadata. Profiles without the simulator marker, unreachable APIs and identity mismatches are retained. Pull the complete repository update on the affected Mac before retrying `./k8s-sim.sh start`.

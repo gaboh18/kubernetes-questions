@@ -29,6 +29,9 @@ except (ValueError, TypeError, AttributeError):
     sys.exit("Cannot inspect Minikube profiles; refusing to start.")
 ')
     if [ "$profile_status" = present ]; then
+        if [ ! -s "$STATE_DIR/cluster-uid" ]; then
+            recover_lab_identity
+        fi
         require_lab
         previous_context=$(kubectl config current-context 2>/dev/null || true)
         archive_dir=$(python3 "$LAB_DIR/attempt_archive.py" prepare --node)
@@ -50,8 +53,9 @@ except (ValueError, TypeError, AttributeError):
     else
         minikube -p "$PROFILE" start --kubernetes-version="$version" --cni=calico --driver=docker --container-runtime=containerd --keep-context
     fi
-    k get ns kube-system -o jsonpath='{.metadata.uid}' --request-timeout=15s > "$STATE_DIR/cluster-uid"
-    [ -s "$STATE_DIR/cluster-uid" ] || die "Could not record cluster ownership."
+    local created_uid
+    created_uid=$(k get ns kube-system -o jsonpath='{.metadata.uid}' --request-timeout=15s) || die "Could not read new cluster ownership; no ownership record was written."
+    save_cluster_uid "$created_uid"
     k wait --for=condition=Ready nodes --all --timeout=180s
     bash "$LAB_DIR/exam-setup.sh"
     # Recreating Minikube can remove its active context. Keep unrelated choices,
